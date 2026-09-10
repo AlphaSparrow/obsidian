@@ -1,0 +1,25 @@
+[package]
+name = "obsidian_actor_runtime"
+version = "0.1.0"
+edition = "2021"
+authors = ["Aayush Sakariya"]
+license = "Apache-2.0"
+description = "Lock-free actor runtime for Obsidian kernel — C-ABI FFI boundary"
+publish = false
+
+[lib]
+# Produce both a static archive (.a / .lib) and a C-compatible shared lib
+# for linking into the C++ kernel.  The CMake build (via Corrosion) consumes
+# the staticlib; the cdylib is available for dynamic loading in tests.
+crate-type = ["staticlib", "cdylib"]
+path = "actor_runtime.rs"
+
+[dependencies]
+# Core async runtime — will be needed when actor_runtime is implemented
+# tokio = { version = "1", features = ["rt-multi-thread", "sync", "macros"] }
+# crossbeam-channel = "0.5"
+
+[build-dependencies]
+# cbindgen generates a C/C++ header from Rust #[no_mangle] extern "C" fns.
+# The build.rs script drives this automatically.
+cbindgen = "0.27"
