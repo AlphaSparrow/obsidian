@@ -1,0 +1,36 @@
+#ifndef @EXPORT_MACRO_PREFIX@_EXPORT_H
+#define @EXPORT_MACRO_PREFIX@_EXPORT_H
+
+#ifdef @EXPORT_MACRO_PREFIX@_STATIC_DEFINE
+#  define @EXPORT_MACRO_PREFIX@_EXPORT
+#  define @EXPORT_MACRO_PREFIX@_NO_EXPORT
+#else
+#  if defined(_WIN32) || defined(__CYGWIN__)
+#    ifdef @EXPORT_TARGET@_EXPORTS
+#      define @EXPORT_MACRO_PREFIX@_EXPORT __declspec(dllexport)
+#    else
+#      define @EXPORT_MACRO_PREFIX@_EXPORT __declspec(dllimport)
+#    endif
+#    define @EXPORT_MACRO_PREFIX@_NO_EXPORT
+#  else
+#    if defined(__GNUC__) && __GNUC__ >= 4
+#      define @EXPORT_MACRO_PREFIX@_EXPORT __attribute__((visibility("default")))
+#      define @EXPORT_MACRO_PREFIX@_NO_EXPORT __attribute__((visibility("hidden")))
+#    else
+#      define @EXPORT_MACRO_PREFIX@_EXPORT
+#      define @EXPORT_MACRO_PREFIX@_NO_EXPORT
+#    endif
+#  endif
+#endif
+
+#ifndef @EXPORT_MACRO_PREFIX@_DEPRECATED
+#  if defined(__GNUC__) || defined(__clang__)
+#    define @EXPORT_MACRO_PREFIX@_DEPRECATED __attribute__((deprecated))
+#  elif defined(_MSC_VER)
+#    define @EXPORT_MACRO_PREFIX@_DEPRECATED __declspec(deprecated)
+#  else
+#    define @EXPORT_MACRO_PREFIX@_DEPRECATED
+#  endif
+#endif
+
+#endif /* @EXPORT_MACRO_PREFIX@_EXPORT_H */

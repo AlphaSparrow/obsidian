@@ -79,7 +79,17 @@ endif()
 # This is enforced in code, not here. This comment exists so you know the
 # policy lives at the source level, not at the build-system level.
 
-# ── 8. SIMD capability detection ────────────────────────────────────────────
+# ── 8. Cache Line Size ───────────────────────────────────────────────────────
+# Critical for false-sharing prevention and ring buffer alignment in low-latency code.
+# Apple Silicon utilizes 128-byte cache lines; standard x86_64 and Neoverse use 64 bytes.
+
+if(OBSIDIAN_PLATFORM STREQUAL "darwin" AND OBSIDIAN_ARCH_CANONICAL STREQUAL "aarch64")
+    set(OBSIDIAN_CACHE_LINE_SIZE 128)
+else()
+    set(OBSIDIAN_CACHE_LINE_SIZE 64)
+endif()
+
+# ── 9. SIMD capability detection ────────────────────────────────────────────
 # Sets OBSIDIAN_SIMD_LEVEL and per-level compile flags.
 #
 # On x86_64 the hierarchy is: SSE4.2 → AVX2 → AVX-512
@@ -93,12 +103,6 @@ set(OBSIDIAN_SIMD_LEVEL "NONE")
 if(OBSIDIAN_ARCH_CANONICAL STREQUAL "x86_64")
     # Check from highest to lowest. CMake does not have intrinsic CPUID
     # support, so we probe via compiler feature flags and test-compile.
-    #
-    # NOTE: check_cxx_compiler_flag inherits CMAKE_CXX_STANDARD. If the
-    # compiler doesn't support the requested standard (e.g. GCC 6 + C++20)
-    # the test-compile will fail even though the flag itself is valid. We
-    # temporarily drop the standard requirement for these probes.
-
     include(CheckCXXCompilerFlag)
 
     set(_saved_cxx_standard ${CMAKE_CXX_STANDARD})
@@ -143,9 +147,10 @@ elseif(OBSIDIAN_ARCH_CANONICAL STREQUAL "aarch64")
     set(OBSIDIAN_SIMD_FLAGS_NEON "")
 endif()
 
-# ── 9. Summary ───────────────────────────────────────────────────────────────
+# ── 10. Summary ─────────────────────────────────────────────────────────────
 
-message(STATUS "[obsidian] Platform     : ${OBSIDIAN_PLATFORM}")
-message(STATUS "[obsidian] Architecture : ${OBSIDIAN_ARCH} (canonical: ${OBSIDIAN_ARCH_CANONICAL})")
-message(STATUS "[obsidian] Big endian   : ${OBSIDIAN_BIG_ENDIAN}")
-message(STATUS "[obsidian] SIMD level   : ${OBSIDIAN_SIMD_LEVEL}")
+message(STATUS "[obsidian] Platform        : ${OBSIDIAN_PLATFORM}")
+message(STATUS "[obsidian] Architecture    : ${OBSIDIAN_ARCH} (canonical: ${OBSIDIAN_ARCH_CANONICAL})")
+message(STATUS "[obsidian] Cache line size : ${OBSIDIAN_CACHE_LINE_SIZE} bytes")
+message(STATUS "[obsidian] Big endian      : ${OBSIDIAN_BIG_ENDIAN}")
+message(STATUS "[obsidian] SIMD level      : ${OBSIDIAN_SIMD_LEVEL}")

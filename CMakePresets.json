@@ -13,44 +13,53 @@
             "binaryDir": "${sourceDir}/build/${presetName}",
             "installDir": "${sourceDir}/install/${presetName}",
             "cacheVariables": {
-                "CMAKE_EXPORT_COMPILE_COMMANDS": "ON"
+                "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
+                "OBSIDIAN_ENABLE_CCACHE": "ON",
+                "OBSIDIAN_ENABLE_FAST_LINKER": "ON"
             }
         },
         {
             "name": "dev",
-            "displayName": "Development (Debug, Sanitizers)",
-            "description": "Fast iteration: Debug build with ASan+UBSan, no optional backends",
+            "displayName": "Development (Debug + Sanitizers)",
+            "description": "Fast inner-loop iteration: Debug build with ASan+UBSan, ccache, and mold/lld",
             "inherits": "base",
             "cacheVariables": {
                 "CMAKE_BUILD_TYPE": "Debug",
+                "OBSIDIAN_SANITIZER": "asan,ubsan",
+                "OBSIDIAN_CPU_TARGET": "generic",
+                "OBSIDIAN_FP_MODEL": "strict",
                 "OBSIDIAN_ENABLE_CUDA": "OFF",
                 "OBSIDIAN_ENABLE_MPI": "OFF",
                 "OBSIDIAN_ENABLE_GRPC": "OFF",
                 "OBSIDIAN_ENABLE_RUST": "OFF",
-                "OBSIDIAN_ENABLE_SANITIZERS": "ON",
                 "OBSIDIAN_ENABLE_TESTS": "ON"
             }
         },
         {
-            "name": "dev-full",
-            "displayName": "Development Full (Debug, All Backends)",
-            "description": "Debug build with all optional backends enabled",
-            "inherits": "dev",
+            "name": "perf",
+            "displayName": "Performance & Profiling (RelWithDebInfo + Native Arch)",
+            "description": "Latency profiling & benchmarking: native microarch, frame pointers, no sanitizers",
+            "inherits": "base",
             "cacheVariables": {
-                "OBSIDIAN_ENABLE_CUDA": "ON",
-                "OBSIDIAN_ENABLE_MPI": "ON",
-                "OBSIDIAN_ENABLE_GRPC": "ON",
-                "OBSIDIAN_ENABLE_RUST": "ON"
+                "CMAKE_BUILD_TYPE": "RelWithDebInfo",
+                "OBSIDIAN_CPU_TARGET": "native",
+                "OBSIDIAN_FP_MODEL": "relaxed",
+                "OBSIDIAN_SANITIZER": "none",
+                "OBSIDIAN_ENABLE_LTO": "OFF",
+                "OBSIDIAN_ENABLE_TESTS": "ON"
             }
         },
         {
-            "name": "release",
-            "displayName": "Release (Optimised, LTO)",
-            "description": "Production build: O3, LTO, stripped, no sanitizers",
+            "name": "release-native",
+            "displayName": "Production Release (Native CPU + LTO)",
+            "description": "Maximum throughput & sub-millisecond execution: -march=native, ThinLTO, dead-code stripped",
             "inherits": "base",
             "cacheVariables": {
                 "CMAKE_BUILD_TYPE": "Release",
+                "OBSIDIAN_CPU_TARGET": "native",
+                "OBSIDIAN_FP_MODEL": "relaxed",
                 "OBSIDIAN_ENABLE_LTO": "ON",
+                "OBSIDIAN_SANITIZER": "none",
                 "OBSIDIAN_ENABLE_CUDA": "OFF",
                 "OBSIDIAN_ENABLE_MPI": "OFF",
                 "OBSIDIAN_ENABLE_GRPC": "OFF",
@@ -60,31 +69,33 @@
         },
         {
             "name": "ci-linux-x64",
-            "displayName": "CI — Linux x86_64 (GCC)",
-            "description": "CI build for Linux x86_64 with all features",
+            "displayName": "CI — Linux x86_64 (GCC/Clang, x86-64-v3)",
+            "description": "Deterministic server build targeting x86-64-v3 microarchitecture baseline",
             "inherits": "base",
             "cacheVariables": {
                 "CMAKE_BUILD_TYPE": "RelWithDebInfo",
                 "CMAKE_TOOLCHAIN_FILE": "${sourceDir}/cmake/toolchains/linux-x86_64.cmake",
-                "OBSIDIAN_ENABLE_CUDA": "ON",
-                "OBSIDIAN_ENABLE_MPI": "ON",
-                "OBSIDIAN_ENABLE_GRPC": "ON",
-                "OBSIDIAN_ENABLE_RUST": "ON",
+                "OBSIDIAN_CPU_TARGET": "x86-64-v3",
+                "OBSIDIAN_FP_MODEL": "strict",
+                "OBSIDIAN_SANITIZER": "none",
+                "OBSIDIAN_ENABLE_CUDA": "OFF",
+                "OBSIDIAN_ENABLE_MPI": "OFF",
+                "OBSIDIAN_ENABLE_GRPC": "OFF",
+                "OBSIDIAN_ENABLE_RUST": "OFF",
                 "OBSIDIAN_ENABLE_TESTS": "ON"
             }
         },
         {
             "name": "ci-linux-aarch64",
             "displayName": "CI — Linux aarch64 (Cross)",
-            "description": "CI cross-compilation for Linux aarch64",
+            "description": "CI cross-compilation for Linux aarch64 server architecture",
             "inherits": "base",
             "cacheVariables": {
                 "CMAKE_BUILD_TYPE": "RelWithDebInfo",
                 "CMAKE_TOOLCHAIN_FILE": "${sourceDir}/cmake/toolchains/linux-aarch64.cmake",
-                "OBSIDIAN_ENABLE_CUDA": "OFF",
-                "OBSIDIAN_ENABLE_MPI": "OFF",
-                "OBSIDIAN_ENABLE_GRPC": "OFF",
-                "OBSIDIAN_ENABLE_RUST": "OFF",
+                "OBSIDIAN_CPU_TARGET": "generic",
+                "OBSIDIAN_FP_MODEL": "strict",
+                "OBSIDIAN_SANITIZER": "none",
                 "OBSIDIAN_ENABLE_TESTS": "OFF"
             }
         },
@@ -93,29 +104,26 @@
             "displayName": "CI — Windows x64 (MSVC)",
             "description": "CI build for Windows x64 with MSVC",
             "inherits": "base",
-            "generator": "Ninja",
             "cacheVariables": {
                 "CMAKE_BUILD_TYPE": "RelWithDebInfo",
                 "CMAKE_TOOLCHAIN_FILE": "${sourceDir}/cmake/toolchains/windows-x64-msvc.cmake",
-                "OBSIDIAN_ENABLE_CUDA": "OFF",
-                "OBSIDIAN_ENABLE_MPI": "OFF",
-                "OBSIDIAN_ENABLE_GRPC": "OFF",
-                "OBSIDIAN_ENABLE_RUST": "OFF",
+                "OBSIDIAN_CPU_TARGET": "x86-64-v3",
+                "OBSIDIAN_FP_MODEL": "strict",
+                "OBSIDIAN_SANITIZER": "none",
                 "OBSIDIAN_ENABLE_TESTS": "ON"
             }
         },
         {
             "name": "ci-macos-universal",
             "displayName": "CI — macOS Universal (AppleClang)",
-            "description": "CI build for macOS fat binary (x86_64 + arm64), no CUDA",
+            "description": "CI build for macOS fat binary (x86_64 + arm64)",
             "inherits": "base",
             "cacheVariables": {
                 "CMAKE_BUILD_TYPE": "RelWithDebInfo",
                 "CMAKE_TOOLCHAIN_FILE": "${sourceDir}/cmake/toolchains/macos-universal.cmake",
-                "OBSIDIAN_ENABLE_CUDA": "OFF",
-                "OBSIDIAN_ENABLE_MPI": "OFF",
-                "OBSIDIAN_ENABLE_GRPC": "OFF",
-                "OBSIDIAN_ENABLE_RUST": "OFF",
+                "OBSIDIAN_CPU_TARGET": "generic",
+                "OBSIDIAN_FP_MODEL": "strict",
+                "OBSIDIAN_SANITIZER": "none",
                 "OBSIDIAN_ENABLE_TESTS": "ON"
             }
         }
@@ -126,12 +134,12 @@
             "configurePreset": "dev"
         },
         {
-            "name": "dev-full",
-            "configurePreset": "dev-full"
+            "name": "perf",
+            "configurePreset": "perf"
         },
         {
-            "name": "release",
-            "configurePreset": "release"
+            "name": "release-native",
+            "configurePreset": "release-native"
         },
         {
             "name": "ci-linux-x64",
