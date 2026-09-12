@@ -9,17 +9,34 @@ publish = false
 
 [lib]
 # Produce both a static archive (.a / .lib) and a C-compatible shared lib
-# for linking into the C++ kernel.  The CMake build (via Corrosion) consumes
+# for linking into the C++ kernel. The CMake build (via Corrosion) consumes
 # the staticlib; the cdylib is available for dynamic loading in tests.
 crate-type = ["staticlib", "cdylib"]
 path = "actor_runtime.rs"
 
 [dependencies]
-# Core async runtime — will be needed when actor_runtime is implemented
-# tokio = { version = "1", features = ["rt-multi-thread", "sync", "macros"] }
-# crossbeam-channel = "0.5"
 
 [build-dependencies]
 # cbindgen generates a C/C++ header from Rust #[no_mangle] extern "C" fns.
 # The build.rs script drives this automatically.
 cbindgen = "0.27"
+
+# ── High-Performance Compiler Release Profiles ──────────────────────────────
+# Tailored for low-latency quantitative execution:
+#   - opt-level = 3: Maximum vectorization and inlining
+#   - lto = "thin": Scalable cross-crate link-time optimization
+#   - codegen-units = 1: Maximizes compiler optimization scope across TUs
+#   - panic = "abort": Strips unwinding landing pads, reducing binary size
+#   - strip = true: Removes unnecessary debug symbols in production artifacts
+[profile.release]
+opt-level = 3
+lto = "thin"
+codegen-units = 1
+panic = "abort"
+overflow-checks = false
+strip = true
+
+[profile.bench]
+opt-level = 3
+lto = "thin"
+codegen-units = 1
