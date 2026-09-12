@@ -83,8 +83,8 @@ add_subdirectory(compute)
 # Engines — future: options pricing, risk, execution, alpha models
 # add_subdirectory(engines)
 
-# Terminal / UI — future: renderer, charts, widgets
-# add_subdirectory(terminal)
+# Terminal / UI — desktop application executable (obsidian.exe / Obsidian.app)
+add_subdirectory(terminal)
 
 # Tests
 # if(OBSIDIAN_ENABLE_TESTS)

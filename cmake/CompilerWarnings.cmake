@@ -53,17 +53,26 @@ set(OBSIDIAN_CLANG_WARNINGS
     -Wnull-dereference
     -Wdouble-promotion
     -Wformat=2
-    -Wimplicit-fallthrough
 )
+
+if(CMAKE_CXX_COMPILER_ID MATCHES ".*Clang")
+    list(APPEND OBSIDIAN_CLANG_WARNINGS -Wimplicit-fallthrough)
+endif()
 
 set(OBSIDIAN_GCC_WARNINGS
     ${OBSIDIAN_CLANG_WARNINGS}
     -Wmisleading-indentation
-    -Wduplicated-cond
-    -Wduplicated-branches
     -Wlogical-op
     -Wuseless-cast
 )
+
+if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU" AND CMAKE_CXX_COMPILER_VERSION VERSION_GREATER_EQUAL "7.0")
+    list(APPEND OBSIDIAN_GCC_WARNINGS
+        -Wduplicated-cond
+        -Wduplicated-branches
+        -Wimplicit-fallthrough
+    )
+endif()
 
 # ── 2. Warnings Interface Target ────────────────────────────────────────────
 

@@ -1,0 +1,38 @@
+#include <windows.h>
+
+// Embed application manifest
+1 RT_MANIFEST "@CMAKE_CURRENT_SOURCE_DIR@/desktop/resources/obsidian.manifest"
+
+// Version information for Windows Explorer and Task Manager
+VS_VERSION_INFO VERSIONINFO
+FILEVERSION     @PROJECT_VERSION_MAJOR@,@PROJECT_VERSION_MINOR@,@PROJECT_VERSION_PATCH@,0
+PRODUCTVERSION  @PROJECT_VERSION_MAJOR@,@PROJECT_VERSION_MINOR@,@PROJECT_VERSION_PATCH@,0
+FILEFLAGSMASK   VS_FFI_FILEFLAGSMASK
+#ifdef _DEBUG
+FILEFLAGS       VS_FF_DEBUG
+#else
+FILEFLAGS       0x0L
+#endif
+FILEOS          VOS_NT_WINDOWS32
+FILETYPE        VFT_APP
+FILESUBTYPE     VFT2_UNKNOWN
+BEGIN
+    BLOCK "StringFileInfo"
+    BEGIN
+        BLOCK "040904b0"
+        BEGIN
+            VALUE "CompanyName",      "Obsidian Team\0"
+            VALUE "FileDescription",  "Obsidian Desktop Application\0"
+            VALUE "FileVersion",      "@PROJECT_VERSION@.0\0"
+            VALUE "InternalName",     "obsidian\0"
+            VALUE "LegalCopyright",   "Copyright (C) 2026\0"
+            VALUE "OriginalFilename", "obsidian.exe\0"
+            VALUE "ProductName",      "Obsidian Quantitative Platform\0"
+            VALUE "ProductVersion",   "@PROJECT_VERSION@\0"
+        END
+    END
+    BLOCK "VarFileInfo"
+    BEGIN
+        VALUE "Translation", 0x409, 1200
+    END
+END
