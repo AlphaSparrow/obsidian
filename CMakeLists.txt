@@ -86,6 +86,9 @@ add_subdirectory(compute)
 # Terminal / UI — desktop application executable (obsidian.exe / Obsidian.app)
 add_subdirectory(terminal)
 
+# ── Packaging & Installation (CPack and CMake targets export) ───────────────
+include(Install)
+
 # Tests
 # if(OBSIDIAN_ENABLE_TESTS)
 #     enable_testing()

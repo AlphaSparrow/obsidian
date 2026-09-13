@@ -153,5 +153,45 @@
             "name": "ci-macos-universal",
             "configurePreset": "ci-macos-universal"
         }
+    ],
+    "packagePresets": [
+        {
+            "name": "release-native",
+            "displayName": "Package Release (Native)",
+            "description": "Production distribution package built with native CPU optimizations",
+            "configurePreset": "release-native",
+            "generators": [
+                "TGZ",
+                "ZIP"
+            ]
+        },
+        {
+            "name": "ci-linux-x64",
+            "displayName": "Package CI Linux x86_64",
+            "description": "Deterministic server packages (tarball and deb)",
+            "configurePreset": "ci-linux-x64",
+            "generators": [
+                "TGZ",
+                "DEB"
+            ]
+        },
+        {
+            "name": "ci-windows-x64",
+            "displayName": "Package CI Windows x64",
+            "description": "Windows production distribution zip",
+            "configurePreset": "ci-windows-x64",
+            "generators": [
+                "ZIP"
+            ]
+        },
+        {
+            "name": "ci-macos-universal",
+            "displayName": "Package CI macOS Universal",
+            "description": "macOS universal tarball package",
+            "configurePreset": "ci-macos-universal",
+            "generators": [
+                "TGZ"
+            ]
+        }
     ]
 }

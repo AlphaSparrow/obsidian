@@ -62,6 +62,6 @@ target_link_libraries(obsidian
 include(GNUInstallDirs)
 
 install(TARGETS obsidian
-    BUNDLE  DESTINATION .
-    RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
+    BUNDLE  DESTINATION .                           COMPONENT runtime
+    RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}      COMPONENT runtime
 )
