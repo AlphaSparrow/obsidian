@@ -13,17 +13,7 @@ namespace obsidian {
 namespace kernel {
 namespace concurrency {
 
-/// Chase-Lev Lock-Free Work-Stealing Deque.
-///
-/// DDIA Workload Parallelization & Distributed Dataflow (Chapter 10/11):
-/// Dynamic task load-balancing across worker threads with minimal synchronization.
-///
-/// Principles:
-///   1. Owner Thread (Bottom): Pushes and pops tasks LIFO in O(1) wait-free time.
-///      LIFO maximizes temporal cache locality, ensuring recently created data
-///      resides hot in CPU L1/L2 caches.
-///   2. Thief Threads (Top): Steal tasks FIFO in O(1) lock-free time via CAS.
-///      FIFO steals the oldest tasks at the root of sub-graphs, maximizing stolen work.
+// Chase-Lev lock-free work-stealing deque
 class WorkStealingDeque {
 public:
     using Task = std::function<void()>;

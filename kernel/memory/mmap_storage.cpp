@@ -20,12 +20,7 @@ namespace obsidian {
 namespace kernel {
 namespace memory {
 
-/// Zero-Copy Memory-Mapped Storage.
-///
-/// DDIA Chapter 3 (Storage & Retrieval - Append-Only Log Segments & SSTables):
-/// Maps disk-persisted data directly into the application's virtual address space,
-/// allowing the OS page cache to handle hardware prefetching and page eviction
-/// without user/kernel buffer copy overhead.
+// Memory-mapped file storage
 class MmapStorage {
 public:
     MmapStorage() = default;

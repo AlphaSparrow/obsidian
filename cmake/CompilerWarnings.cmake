@@ -1,27 +1,16 @@
-# cmake/CompilerWarnings.cmake
-# ---------------------------------------------------------------------------
-# Strict, high-signal compiler warning policy.
-#
-# Provides:
-#   - obsidian::warnings (INTERFACE target)
-#   - obsidian_set_warnings(target [WARNINGS_AS_ERRORS ON|OFF])
-#
-# Third-party dependencies linked with SYSTEM will NOT inherit these warnings.
-# ---------------------------------------------------------------------------
-
+# Compiler warning policies
 include_guard(GLOBAL)
 
-# ── 1. Define Warning Sets ──────────────────────────────────────────────────
-
+# MSVC warning configuration
 set(OBSIDIAN_MSVC_WARNINGS
     /W4
-    /permissive-          # Strict standards conformance
-    /utf-8                # Consistent UTF-8 source and execution character set
-    /Zc:__cplusplus       # Report correct __cplusplus macro
+    /permissive-          # Standards conformance
+    /utf-8                # UTF-8 source and execution character set
+    /Zc:__cplusplus       # Proper __cplusplus macro
     /w14242               # Narrowing conversion
     /w14254               # Operator conversion
     /w14263               # Member function does not override
-    /w14265               # Class has virtual functions but dtor is not virtual
+    /w14265               # Virtual functions without virtual dtor
     /w14287               # Unsigned/negative constant mismatch
     /w14296               # Expression is always true/false
     /w14311               # Pointer truncation
@@ -38,6 +27,7 @@ set(OBSIDIAN_MSVC_WARNINGS
     /w14928               # Illegal copy-init
 )
 
+# Clang warning configuration
 set(OBSIDIAN_CLANG_WARNINGS
     -Wall
     -Wextra
@@ -59,6 +49,7 @@ if(CMAKE_CXX_COMPILER_ID MATCHES ".*Clang")
     list(APPEND OBSIDIAN_CLANG_WARNINGS -Wimplicit-fallthrough)
 endif()
 
+# GCC warning configuration
 set(OBSIDIAN_GCC_WARNINGS
     ${OBSIDIAN_CLANG_WARNINGS}
     -Wmisleading-indentation
@@ -74,8 +65,7 @@ if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU" AND CMAKE_CXX_COMPILER_VERSION VERSION_G
     )
 endif()
 
-# ── 2. Warnings Interface Target ────────────────────────────────────────────
-
+# Warnings interface target
 add_library(obsidian_warnings INTERFACE)
 add_library(obsidian::warnings ALIAS obsidian_warnings)
 
@@ -87,8 +77,7 @@ elseif(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
     target_compile_options(obsidian_warnings INTERFACE ${OBSIDIAN_GCC_WARNINGS})
 endif()
 
-# ── 3. Helper Function for Target-Specific Overrides ─────────────────────────
-
+# Helper function to configure target warnings
 function(obsidian_set_warnings _target)
     cmake_parse_arguments(ARG "" "WARNINGS_AS_ERRORS" "" ${ARGN})
     if(NOT DEFINED ARG_WARNINGS_AS_ERRORS)

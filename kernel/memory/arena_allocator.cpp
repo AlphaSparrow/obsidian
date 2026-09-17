@@ -12,17 +12,7 @@ namespace memory {
 extern void* cache_aligned_alloc(size_t size, size_t alignment) noexcept;
 extern void cache_aligned_free(void* ptr) noexcept;
 
-/// High-performance Linear Bump-Pointer Arena Allocator.
-///
-/// DDIA Chapter 3 (Storage & Retrieval - In-Memory Memtables):
-/// Eliminates per-object malloc/free overhead and internal fragmentation.
-/// Time Complexity:
-///   - allocate(): O(1) deterministic (single addition & bitwise mask)
-///   - deallocate(): O(1) no-op
-///   - reset(): O(1) deterministic (resets cursor to 0)
-/// Cache Locality:
-///   Sequential allocations reside contiguously in memory, maximizing L1/L2
-///   cache line spatial locality and CPU hardware prefetcher efficiency.
+// Linear bump-pointer arena allocator
 class ArenaAllocator final : public IAllocator {
 public:
     explicit ArenaAllocator(size_t capacity, size_t alignment = kCacheLineSize) noexcept

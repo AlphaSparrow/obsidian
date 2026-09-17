@@ -1,13 +1,4 @@
-# terminal/CMakeLists.txt
-# ---------------------------------------------------------------------------
-# Obsidian Desktop Terminal Executable Target.
-#
-# Generates:
-#   - Windows: obsidian.exe (with embedded manifest, version info, and high-DPI metadata)
-#   - macOS:   Obsidian.app bundle
-#   - Linux:   obsidian ELF binary
-# ---------------------------------------------------------------------------
-
+# Obsidian terminal desktop target
 option(OBSIDIAN_GUI_APP "Build desktop application without persistent console window" ON)
 
 set(_terminal_sources
@@ -16,8 +7,7 @@ set(_terminal_sources
     desktop/app.cpp
 )
 
-# ── Windows Executable Resources (Metadata & Manifest) ─────────────────────
-
+# Windows resources
 if(WIN32)
     set(_rc_file "${CMAKE_CURRENT_BINARY_DIR}/obsidian.rc")
     configure_file(
@@ -28,8 +18,7 @@ if(WIN32)
     list(APPEND _terminal_sources "${_rc_file}")
 endif()
 
-# ── Executable Target ───────────────────────────────────────────────────────
-
+# Executable target
 if(OBSIDIAN_GUI_APP)
     add_executable(obsidian WIN32 MACOSX_BUNDLE ${_terminal_sources})
 else()
@@ -37,10 +26,7 @@ else()
     target_compile_definitions(obsidian PRIVATE _CONSOLE=1)
 endif()
 
-# Alias target
 add_executable(obsidian::terminal ALIAS obsidian)
-
-# ── Target Properties & Dependencies ────────────────────────────────────────
 
 target_include_directories(obsidian
     PRIVATE
@@ -57,8 +43,7 @@ target_link_libraries(obsidian
         obsidian::malloc
 )
 
-# ── Installation Rules ──────────────────────────────────────────────────────
-
+# Installation rules
 include(GNUInstallDirs)
 
 install(TARGETS obsidian

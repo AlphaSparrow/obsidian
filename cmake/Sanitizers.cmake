@@ -1,19 +1,4 @@
-# cmake/Sanitizers.cmake
-# ---------------------------------------------------------------------------
-# Dynamic Sanitizer Configuration for Obsidian.
-#
-# Supported modes:
-#   OBSIDIAN_SANITIZER = "asan"       — AddressSanitizer
-#   OBSIDIAN_SANITIZER = "ubsan"      — UndefinedBehaviorSanitizer
-#   OBSIDIAN_SANITIZER = "tsan"       — ThreadSanitizer (incompatible with ASan)
-#   OBSIDIAN_SANITIZER = "msan"       — MemorySanitizer (Clang-only, incompatible with ASan)
-#   OBSIDIAN_SANITIZER = "asan,ubsan" — Combined Address + Undefined Behavior
-#   OBSIDIAN_SANITIZER = "none"       — Disabled
-#
-# Exports:
-#   obsidian::sanitizers (INTERFACE target)
-# ---------------------------------------------------------------------------
-
+# Sanitizer configuration
 include_guard(GLOBAL)
 
 add_library(obsidian_sanitizers INTERFACE)
@@ -28,14 +13,14 @@ endif()
 if(MSVC)
     if(OBSIDIAN_SANITIZER MATCHES "asan|address")
         target_compile_options(obsidian_sanitizers INTERFACE /fsanitize=address)
-        message(STATUS "[obsidian/sanitizers] MSVC ASan enabled on obsidian::sanitizers")
+        message(STATUS "[obsidian/sanitizers] MSVC ASan enabled")
     else()
-        message(WARNING "[obsidian/sanitizers] MSVC only supports ASan. Requested '${OBSIDIAN_SANITIZER}' will be ignored.")
+        message(WARNING "[obsidian/sanitizers] MSVC only supports ASan. '${OBSIDIAN_SANITIZER}' will be ignored.")
     endif()
     return()
 endif()
 
-# GCC / Clang
+# GCC and Clang sanitizers
 set(_san_compile "")
 set(_san_link "")
 
@@ -59,19 +44,17 @@ foreach(_san IN LISTS _san_list)
         endif()
         list(APPEND _san_compile -fsanitize=memory -fsanitize-memory-track-origins=2)
         list(APPEND _san_link    -fsanitize=memory)
-    elseif(_san STREQUAL "leak")
-        list(APPEND _san_compile -fsanitize=leak)
-        list(APPEND _san_link    -fsanitize=leak)
     else()
-        message(WARNING "[obsidian/sanitizers] Unknown sanitizer: ${_san}")
+        message(WARNING "[obsidian/sanitizers] Unknown sanitizer '${_san}' ignored.")
     endif()
 endforeach()
 
 if(_san_compile)
-    list(APPEND _san_compile -fno-omit-frame-pointer -fno-optimize-sibling-calls)
-
-    target_compile_options(obsidian_sanitizers INTERFACE ${_san_compile})
+    target_compile_options(obsidian_sanitizers INTERFACE
+        ${_san_compile}
+        -fno-omit-frame-pointer
+        -fno-optimize-sibling-calls
+    )
     target_link_options(obsidian_sanitizers INTERFACE ${_san_link})
-
-    message(STATUS "[obsidian/sanitizers] Enabled '${OBSIDIAN_SANITIZER}' on obsidian::sanitizers")
+    message(STATUS "[obsidian/sanitizers] Sanitizers enabled: ${OBSIDIAN_SANITIZER}")
 endif()

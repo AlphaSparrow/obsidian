@@ -1,45 +1,26 @@
-# cmake/Optimization.cmake
-# ---------------------------------------------------------------------------
-# High-Performance Compiler & Linker Optimization Policy for Obsidian.
-#
-# Tailored for low-latency quantitative finance systems:
-#   - Fast Linkers (mold, lld) for instant iteration and LTO scalability
-#   - Compiler Caching (ccache, sccache)
-#   - Microarchitecture Tuning (-march=native, x86-64-v3, x86-64-v4)
-#   - Controlled Floating-Point Semantics (strict vs relaxed)
-#   - ThinLTO / LTO Configuration
-#   - Code and Cache-Line Alignment (-falign-functions=64)
-#   - Vectorization Diagnostics Reporting
-#
-# Exports:
-#   obsidian::tuning (INTERFACE target)
-# ---------------------------------------------------------------------------
-
+# Compiler and linker optimization settings
 include_guard(GLOBAL)
 
-# ── 1. Fast Linker Integration (mold / lld) ─────────────────────────────────
-
-option(OBSIDIAN_ENABLE_FAST_LINKER "Use ultra-fast modern linker (mold or lld) if available" ON)
+# Fast linkers (mold / lld)
+option(OBSIDIAN_ENABLE_FAST_LINKER "Use fast linker (mold or lld) if available" ON)
 
 if(OBSIDIAN_ENABLE_FAST_LINKER AND NOT MSVC)
     find_program(MOLD_LINKER NAMES mold)
     find_program(LLD_LINKER  NAMES ld.lld lld)
 
     if(MOLD_LINKER)
-        # mold is the fastest ELF linker in existence
         add_link_options("-fuse-ld=mold")
-        message(STATUS "[obsidian/tuning] Fast linker enabled: mold (${MOLD_LINKER})")
+        message(STATUS "[obsidian/tuning] Linker: mold (${MOLD_LINKER})")
     elseif(LLD_LINKER)
         add_link_options("-fuse-ld=lld")
-        message(STATUS "[obsidian/tuning] Fast linker enabled: lld (${LLD_LINKER})")
+        message(STATUS "[obsidian/tuning] Linker: lld (${LLD_LINKER})")
     else()
-        message(STATUS "[obsidian/tuning] Fast linker requested, but neither mold nor lld was found; using system default")
+        message(STATUS "[obsidian/tuning] Fast linker requested, but mold/lld not found; using system default")
     endif()
 endif()
 
-# ── 2. Compiler Launcher (ccache / sccache) ──────────────────────────────────
-
-option(OBSIDIAN_ENABLE_CCACHE "Use compiler cache (ccache or sccache) to accelerate rebuilds" ON)
+# Compiler cache (ccache / sccache)
+option(OBSIDIAN_ENABLE_CCACHE "Use ccache or sccache for build caching" ON)
 
 if(OBSIDIAN_ENABLE_CCACHE)
     find_program(CCACHE_EXE NAMES ccache sccache)
@@ -49,25 +30,16 @@ if(OBSIDIAN_ENABLE_CCACHE)
         if(OBSIDIAN_ENABLE_CUDA)
             set(CMAKE_CUDA_COMPILER_LAUNCHER "${CCACHE_EXE}" CACHE STRING "CUDA compiler launcher" FORCE)
         endif()
-        message(STATUS "[obsidian/tuning] Compiler cache enabled: ${CCACHE_EXE}")
-    else()
-        message(STATUS "[obsidian/tuning] Compiler cache requested, but ccache/sccache was not found")
+        message(STATUS "[obsidian/tuning] Compiler cache: ${CCACHE_EXE}")
     endif()
 endif()
 
-# ── 3. Interface Target Definition ──────────────────────────────────────────
-
+# Interface target
 add_library(obsidian_tuning INTERFACE)
 add_library(obsidian::tuning ALIAS obsidian_tuning)
 
-# ── 4. Target Microarchitecture Selection ───────────────────────────────────
-
-# CPU Target options:
-#   "native"    — tune specifically for the host machine (best for local benchmarks & production nodes)
-#   "x86-64-v3" — AVX, AVX2, BMI1, BMI2, FMA (standard modern server baseline)
-#   "x86-64-v4" — AVX-512F, BW, CD, DQ, VL (modern Xeon/EPYC)
-#   "generic"   — baseline portable x86_64 / aarch64
-set(OBSIDIAN_CPU_TARGET "generic" CACHE STRING "CPU microarchitecture target (native, x86-64-v3, x86-64-v4, generic)")
+# Microarchitecture tuning
+set(OBSIDIAN_CPU_TARGET "generic" CACHE STRING "CPU microarchitecture (native, x86-64-v3, x86-64-v4, generic)")
 set_property(CACHE OBSIDIAN_CPU_TARGET PROPERTY STRINGS native x86-64-v3 x86-64-v4 generic)
 
 if(MSVC)
@@ -86,13 +58,7 @@ else()
     endif()
 endif()
 
-# ── 5. Floating-Point Model (Numerical Precision Policy) ─────────────────────
-
-# In quantitative finance, blind -ffast-math breaks NaN/Inf checks, which can be
-# disastrous for pricing and risk engines.
-#   "strict"  — Full IEEE-754 compliance (preserves NaN, Inf, signed zeros)
-#   "relaxed" — Allows reciprocal math, disables errno and trapping math, but keeps NaN/Inf intact
-#   "fast"    — Aggressive fast-math (only for isolated compute kernels)
+# Floating-point model
 set(OBSIDIAN_FP_MODEL "strict" CACHE STRING "Floating point model (strict, relaxed, fast)")
 set_property(CACHE OBSIDIAN_FP_MODEL PROPERTY STRINGS strict relaxed fast)
 
@@ -104,7 +70,6 @@ if(MSVC)
     endif()
 else()
     if(OBSIDIAN_FP_MODEL STREQUAL "relaxed")
-        # Safe performance flags: eliminate math errno overhead and reciprocal division without NaN corruption
         target_compile_options(obsidian_tuning INTERFACE
             -fno-math-errno
             -fno-trapping-math
@@ -116,30 +81,29 @@ else()
     endif()
 endif()
 
-# ── 6. Codegen & Cache Alignment Optimization ────────────────────────────────
-
+# Codegen and alignment
 if(NOT MSVC)
-    # Stream compiler intermediate stages via memory pipes instead of temporary disk files
-    target_compile_options(obsidian_tuning INTERFACE -pipe)
+    target_compile_options(obsidian_tuning INTERFACE
+        -pipe
+        -Wdate-time
+        -frandom-seed=obsidian
+        -fmacro-prefix-map=${CMAKE_SOURCE_DIR}=.
+    )
 
-    # Align functions to 64-byte cache line boundaries to avoid instruction cache line splits
-    # Align loops to 32 bytes for efficient branch target buffering
     target_compile_options(obsidian_tuning INTERFACE
         $<$<CONFIG:Release,RelWithDebInfo>:
             -falign-functions=64
             -falign-loops=32
-            -fno-plt                     # Call functions directly without Procedure Linkage Table jumps
+            -fno-plt
         >
     )
 
-    # In ELF, allow compiler to inline exported symbols within the same binary
     if(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
         target_compile_options(obsidian_tuning INTERFACE
             $<$<CONFIG:Release,RelWithDebInfo>:-fno-semantic-interposition>
         )
     endif()
 
-    # Dead code and unused section elimination
     target_compile_options(obsidian_tuning INTERFACE
         $<$<CONFIG:Release,RelWithDebInfo>:-ffunction-sections -fdata-sections>
     )
@@ -153,13 +117,13 @@ if(NOT MSVC)
         )
     endif()
 else()
-    # Multi-processor compilation across source files & eliminate unreferenced inline COMDAT symbols
+    # MSVC parallel compilation, dead symbol removal, and deterministic output
     target_compile_options(obsidian_tuning INTERFACE
         /MP
         /Zc:inline
+        /Brepro
     )
 
-    # MSVC equivalent for dead code stripping and function-level linking
     target_compile_options(obsidian_tuning INTERFACE
         $<$<CONFIG:Release,RelWithDebInfo>:/Gy /Gw>
     )
@@ -168,11 +132,9 @@ else()
     )
 endif()
 
-# ── 7. Link-Time Optimization (LTO / ThinLTO) ───────────────────────────────
-
+# Link-Time Optimization (LTO / ThinLTO)
 if(OBSIDIAN_ENABLE_LTO)
     if(CMAKE_CXX_COMPILER_ID MATCHES ".*Clang")
-        # ThinLTO provides ~98% of full LTO performance with scalable multi-threaded link times
         target_compile_options(obsidian_tuning INTERFACE $<$<CONFIG:Release,RelWithDebInfo>:-flto=thin>)
         target_link_options(obsidian_tuning    INTERFACE $<$<CONFIG:Release,RelWithDebInfo>:-flto=thin>)
         message(STATUS "[obsidian/tuning] ThinLTO enabled for Clang")
@@ -190,8 +152,7 @@ if(OBSIDIAN_ENABLE_LTO)
     endif()
 endif()
 
-# ── 8. Vectorization Diagnostics (Optional) ─────────────────────────────────
-
+# Optional vectorization remarks
 option(OBSIDIAN_ENABLE_VEC_REPORT "Emit compiler diagnostic remarks on loop vectorization" OFF)
 
 if(OBSIDIAN_ENABLE_VEC_REPORT)
@@ -202,11 +163,8 @@ if(OBSIDIAN_ENABLE_VEC_REPORT)
             -Rpass-analysis=loop-vectorize
         )
     elseif(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
-        target_compile_options(obsidian_tuning INTERFACE
-            -fopt-info-vec-all
-        )
+        target_compile_options(obsidian_tuning INTERFACE -fopt-info-vec-all)
     elseif(MSVC)
         target_compile_options(obsidian_tuning INTERFACE /Qvec-report:2)
     endif()
-    message(STATUS "[obsidian/tuning] Vectorizer diagnostics reporting enabled")
 endif()

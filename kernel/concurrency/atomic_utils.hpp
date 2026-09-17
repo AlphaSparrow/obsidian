@@ -30,9 +30,7 @@ namespace concurrency {
 
 static constexpr size_t kCacheLineSize = 64;
 
-/// Emits an architecture-specific CPU pause instruction to optimize spin loops.
-/// DDIA Concurrency Principle: Prevents memory pipeline stalls, reduces power,
-/// and prevents core hyperthread starvation while spinning for queue slot readiness.
+// Architecture-specific CPU pause instruction for spin loops
 inline void cpu_pause() noexcept {
 #if defined(__x86_64__) || defined(_M_X64) || defined(__i386__) || defined(_M_IX86)
     _mm_pause();
@@ -45,7 +43,7 @@ inline void cpu_pause() noexcept {
 #endif
 }
 
-/// Relinquishes the remaining CPU timeslice to another thread.
+// Relinquish remaining CPU timeslice
 inline void thread_yield() noexcept {
 #if defined(_WIN32)
     SwitchToThread();
@@ -54,7 +52,24 @@ inline void thread_yield() noexcept {
 #endif
 }
 
-/// Adaptive exponential backoff utility for lock-free contention management.
+// Read CPU timestamp counter for benchmarking
+inline uint64_t read_tsc() noexcept {
+#if defined(_MSC_VER)
+    return __rdtsc();
+#elif defined(__x86_64__) || defined(__i386__)
+    uint32_t lo, hi;
+    __asm__ __volatile__("rdtsc" : "=a"(lo), "=d"(hi));
+    return (static_cast<uint64_t>(hi) << 32) | lo;
+#elif defined(__aarch64__)
+    uint64_t val;
+    __asm__ __volatile__("mrs %0, cntvct_el0" : "=r"(val));
+    return val;
+#else
+    return 0;
+#endif
+}
+
+// Adaptive exponential backoff for spin loops
 class SpinWait {
 public:
     SpinWait() = default;
@@ -84,11 +99,7 @@ private:
     uint32_t count_{0};
 };
 
-/// High-Performance Nanosecond Spinlock.
-///
-/// DDIA Chapter 1 (Tail-Latency Preservation):
-/// Replaces heavyweight OS mutexes in latency-critical code paths.
-/// Operates entirely in user-space with sub-10-nanosecond acquisition overhead.
+// Lightweight spinlock
 class SpinLock {
 public:
     void lock() noexcept {
@@ -105,7 +116,7 @@ private:
     std::atomic_flag flag_ = ATOMIC_FLAG_INIT;
 };
 
-/// RAII lock guard for SpinLock.
+// RAII lock guard for SpinLock
 class SpinLockGuard {
 public:
     explicit SpinLockGuard(SpinLock& lock) noexcept : lock_(lock) {
@@ -123,8 +134,7 @@ private:
     SpinLock& lock_;
 };
 
-/// Cache-padded wrapper that isolates variable `T` onto its own 64-byte hardware cache line.
-/// DDIA Multi-Core Scalability: Eliminates false sharing and cache-line bouncing between CPU cores.
+// Cache-padded wrapper to isolate variables onto their own cache line
 template <typename T>
 struct alignas(kCacheLineSize) CachePadded {
     T value;

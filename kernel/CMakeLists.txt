@@ -1,16 +1,5 @@
-# kernel/CMakeLists.txt
-# ---------------------------------------------------------------------------
-# Obsidian Kernel — Core Low-Level Subsystems.
-#
-# Builds:
-#   obsidian_kernel_memory      (OBJECT) — allocators, pools, ring buffers
-#   obsidian_kernel_concurrency (OBJECT) — lock-free queues, thread pool, work stealing
-#   obsidian_kernel_logging     (OBJECT) — structured logging
-#   obsidian_kernel             (STATIC) — aggregate library linking all of the above
-# ---------------------------------------------------------------------------
-
-# ── Memory subsystem ─────────────────────────────────────────────────────────
-
+# Obsidian Kernel core subsystems
+# Memory subsystem
 add_library(obsidian_kernel_memory OBJECT
     memory/allocator.hpp
     memory/arena_allocator.cpp
@@ -35,8 +24,7 @@ target_link_libraries(obsidian_kernel_memory
         obsidian::malloc
 )
 
-# ── Concurrency subsystem ───────────────────────────────────────────────────
-
+# Concurrency subsystem
 add_library(obsidian_kernel_concurrency OBJECT
     concurrency/atomic_utils.hpp
     concurrency/lockfree_queue.cpp
@@ -60,15 +48,13 @@ target_link_libraries(obsidian_kernel_concurrency
         obsidian::malloc
 )
 
-# ── Rust actor runtime (FFI) ────────────────────────────────────────────────
-
+# Rust actor runtime (FFI)
 if(OBSIDIAN_ENABLE_RUST)
     obsidian_require(Corrosion)
     corrosion_import_crate(MANIFEST_PATH concurrency/Cargo.toml)
 endif()
 
-# ── Logging subsystem ───────────────────────────────────────────────────────
-
+# Logging subsystem
 add_library(obsidian_kernel_logging OBJECT
     logging/formatter.cpp
     logging/logger.cpp
@@ -87,28 +73,29 @@ target_link_libraries(obsidian_kernel_logging
         obsidian::sanitizers
 )
 
-# ── Aggregate kernel library ────────────────────────────────────────────────
-
+# Aggregate kernel library
 add_library(obsidian_kernel STATIC)
+
+target_sources(obsidian_kernel PRIVATE
+    $<TARGET_OBJECTS:obsidian_kernel_memory>
+    $<TARGET_OBJECTS:obsidian_kernel_concurrency>
+    $<TARGET_OBJECTS:obsidian_kernel_logging>
+)
 
 target_link_libraries(obsidian_kernel
     PUBLIC
-        obsidian_kernel_memory
-        obsidian_kernel_concurrency
-        obsidian_kernel_logging
         obsidian::tuning
+        obsidian::malloc
+    PRIVATE
         obsidian::warnings
         obsidian::sanitizers
-        obsidian::malloc
 )
 
 if(OBSIDIAN_ENABLE_RUST)
     target_link_libraries(obsidian_kernel PUBLIC obsidian_actor_runtime)
 endif()
 
-# ── Precompiled Headers (PCH) for Acceleration ──────────────────────────────
-# Precompile the heavy standard library headers once on memory subsystem
-# and reuse the parsed AST across all kernel translation units.
+# Precompiled headers
 target_precompile_headers(obsidian_kernel_memory PRIVATE
     <atomic>
     <chrono>
@@ -123,8 +110,7 @@ target_precompile_headers(obsidian_kernel_memory PRIVATE
 target_precompile_headers(obsidian_kernel_concurrency REUSE_FROM obsidian_kernel_memory)
 target_precompile_headers(obsidian_kernel_logging REUSE_FROM obsidian_kernel_memory)
 
-# ── Export Header Generation ────────────────────────────────────────────────
-
+# Export header generation
 set(EXPORT_TARGET obsidian_kernel)
 set(EXPORT_MACRO_PREFIX OBSIDIAN_KERNEL)
 configure_file(

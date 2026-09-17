@@ -1,23 +1,8 @@
-# cmake/Dependencies.cmake
-# ---------------------------------------------------------------------------
-# Third-party dependency declarations.
-#
-# Policy:
-#   - Lightweight / header-only deps → FetchContent with SYSTEM to isolate warnings
-#   - System SDKs (CUDA, MPI, gRPC)  → find_package (must be pre-installed)
-#   - Rust crates                    → Corrosion (CMake ↔ Cargo bridge)
-#   - Low-latency allocators         → Optional mimalloc / jemalloc
-#
-# Nothing is fetched unless actually consumed by a target. FetchContent only
-# downloads when FetchContent_MakeAvailable() or obsidian_require() is called.
-# ---------------------------------------------------------------------------
-
+# Third-party dependency declarations
 include_guard(GLOBAL)
 include(FetchContent)
 
-# ── C++ Libraries ────────────────────────────────────────────────────────────
-
-# fmt — Modern formatting library (std::format backport)
+# C++ libraries
 FetchContent_Declare(
     fmt
     GIT_REPOSITORY https://github.com/fmtlib/fmt.git
@@ -26,7 +11,6 @@ FetchContent_Declare(
     SYSTEM
 )
 
-# spdlog — Fast structured logging (uses fmt)
 FetchContent_Declare(
     spdlog
     GIT_REPOSITORY https://github.com/gabime/spdlog.git
@@ -36,7 +20,6 @@ FetchContent_Declare(
 )
 set(SPDLOG_FMT_EXTERNAL ON CACHE BOOL "" FORCE)
 
-# Abseil — Google's C++ common library (flat containers, strings, time, etc.)
 FetchContent_Declare(
     abseil
     GIT_REPOSITORY https://github.com/abseil/abseil-cpp.git
@@ -46,8 +29,7 @@ FetchContent_Declare(
 )
 set(ABSL_PROPAGATE_CXX_STD ON CACHE BOOL "" FORCE)
 
-# ── Rust Integration (Corrosion) ─────────────────────────────────────────────
-
+# Rust integration (Corrosion)
 FetchContent_Declare(
     Corrosion
     GIT_REPOSITORY https://github.com/corrosion-rs/corrosion.git
@@ -56,8 +38,7 @@ FetchContent_Declare(
     SYSTEM
 )
 
-# ── Low-Latency Memory Allocator Hook ────────────────────────────────────────
-
+# Allocator configuration
 set(OBSIDIAN_MALLOC_BACKEND "system" CACHE STRING "Memory allocator backend (system, mimalloc, jemalloc)")
 set_property(CACHE OBSIDIAN_MALLOC_BACKEND PROPERTY STRINGS system mimalloc jemalloc)
 
@@ -78,7 +59,7 @@ if(OBSIDIAN_MALLOC_BACKEND STREQUAL "mimalloc")
     FetchContent_MakeAvailable(mimalloc)
     target_link_libraries(obsidian_malloc INTERFACE mimalloc-static)
     target_compile_definitions(obsidian_malloc INTERFACE OBSIDIAN_USE_MIMALLOC=1)
-    message(STATUS "[obsidian/deps] Allocator: mimalloc (embedded static)")
+    message(STATUS "[obsidian/deps] Allocator: mimalloc")
 elseif(OBSIDIAN_MALLOC_BACKEND STREQUAL "jemalloc")
     find_package(PkgConfig QUIET)
     if(PKG_CONFIG_FOUND)
@@ -88,17 +69,15 @@ elseif(OBSIDIAN_MALLOC_BACKEND STREQUAL "jemalloc")
         target_include_directories(obsidian_malloc INTERFACE ${JEMALLOC_INCLUDE_DIRS})
         target_link_libraries(obsidian_malloc INTERFACE ${JEMALLOC_LIBRARIES})
         target_compile_definitions(obsidian_malloc INTERFACE OBSIDIAN_USE_JEMALLOC=1)
-        message(STATUS "[obsidian/deps] Allocator: jemalloc (system)")
+        message(STATUS "[obsidian/deps] Allocator: jemalloc")
     else()
-        message(WARNING "[obsidian/deps] jemalloc requested but not found; falling back to system malloc")
+        message(WARNING "[obsidian/deps] jemalloc not found; falling back to system malloc")
     endif()
 else()
     message(STATUS "[obsidian/deps] Allocator: system malloc")
 endif()
 
-# ── System SDKs (optional — guarded by feature toggles) ─────────────────────
-
-# CUDA
+# System SDKs
 if(OBSIDIAN_ENABLE_CUDA)
     include(CheckLanguage)
     check_language(CUDA)
@@ -111,7 +90,6 @@ if(OBSIDIAN_ENABLE_CUDA)
     endif()
 endif()
 
-# MPI
 if(OBSIDIAN_ENABLE_MPI)
     find_package(MPI QUIET)
     if(NOT MPI_FOUND)
@@ -122,7 +100,6 @@ if(OBSIDIAN_ENABLE_MPI)
     endif()
 endif()
 
-# gRPC + Protobuf
 if(OBSIDIAN_ENABLE_GRPC)
     find_package(Protobuf QUIET)
     find_package(gRPC QUIET)
@@ -135,8 +112,7 @@ if(OBSIDIAN_ENABLE_GRPC)
     endif()
 endif()
 
-# ── Helper: Make available on demand ─────────────────────────────────────────
-
+# Helper: make available on demand
 macro(obsidian_require)
     foreach(_dep ${ARGN})
         FetchContent_MakeAvailable(${_dep})

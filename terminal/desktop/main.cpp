@@ -1,7 +1,7 @@
 #include "app.hpp"
 #include <iostream>
 
-#if defined(_MSC_VER) && !defined(_CONSOLE)
+#if defined(_WIN32) && !defined(_CONSOLE)
 #include <windows.h>
 #endif
 
@@ -22,7 +22,7 @@ int main(int argc, char* argv[]) {
     return app.run();
 }
 
-#if defined(_MSC_VER) && !defined(_CONSOLE)
+#if defined(_WIN32) && !defined(_CONSOLE)
 int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nCmdShow) {
     (void)hInstance;
     (void)hPrevInstance;

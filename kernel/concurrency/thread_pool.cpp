@@ -97,11 +97,7 @@ private:
 #endif
 };
 
-/// High-Performance Work-Stealing Thread Pool.
-///
-/// DDIA Multi-Core Parallel Execution (Chapter 1):
-/// Prevents tail-latency amplification by decentralizing task queues.
-/// Uses SpinLock synchronization for sub-microsecond enqueue/dequeue latency.
+// Work-stealing thread pool
 class ThreadPool {
 public:
     using Task = std::function<void()>;

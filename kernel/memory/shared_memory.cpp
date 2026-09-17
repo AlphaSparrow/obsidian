@@ -20,11 +20,7 @@ namespace obsidian {
 namespace kernel {
 namespace memory {
 
-/// Low-Latency Inter-Process Shared Memory Region.
-///
-/// DDIA High-Throughput Stream Pipeline Architecture:
-/// Enables zero-copy, sub-microsecond IPC between local engine processes
-/// (e.g. Market Data Ingestion Process -> Options Pricing Process -> Order Execution Engine).
+// Inter-process shared memory region
 class SharedMemoryRegion {
 public:
     SharedMemoryRegion() = default;

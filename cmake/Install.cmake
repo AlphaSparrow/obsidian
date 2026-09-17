@@ -1,18 +1,9 @@
-# cmake/Install.cmake
-# ---------------------------------------------------------------------------
-# Install rules and CPack packaging configuration for Obsidian.
-#
-# Targets:
-#   cmake --install <dir>       — Install to CMAKE_INSTALL_PREFIX
-#   cpack --preset <preset>     — Generate optimized platform distribution packages
-# ---------------------------------------------------------------------------
-
+# Installation and packaging rules
 include_guard(GLOBAL)
 include(GNUInstallDirs)
 include(CMakePackageConfigHelpers)
 
-# ── 0. Relocatable RPATH Optimization ───────────────────────────────────────
-# Avoid costly relinking cycles during packaging and ensure runtime relocatability.
+# RPATH configuration
 set(CMAKE_SKIP_BUILD_RPATH FALSE)
 set(CMAKE_BUILD_WITH_INSTALL_RPATH FALSE)
 set(CMAKE_INSTALL_RPATH_USE_LINK_PATH TRUE)
@@ -23,11 +14,14 @@ elseif(UNIX)
     set(CMAKE_INSTALL_RPATH "\$ORIGIN/../${CMAKE_INSTALL_LIBDIR}:\$ORIGIN")
 endif()
 
-# ── 1. Library Targets Installation ─────────────────────────────────────────
-
+# Target installation
 install(TARGETS
         obsidian_kernel
         obsidian_simd
+        obsidian_tuning
+        obsidian_warnings
+        obsidian_sanitizers
+        obsidian_malloc
     EXPORT ObsidianTargets
     ARCHIVE  DESTINATION ${CMAKE_INSTALL_LIBDIR}     COMPONENT development
     LIBRARY  DESTINATION ${CMAKE_INSTALL_LIBDIR}     COMPONENT development
@@ -35,23 +29,19 @@ install(TARGETS
     INCLUDES DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
 )
 
-# ── 2. Header Trees Installation ────────────────────────────────────────────
-
-# Kernel public headers
+# Public headers installation
 install(DIRECTORY kernel/
     DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/obsidian/kernel
     COMPONENT development
     FILES_MATCHING PATTERN "*.hpp" PATTERN "*.h"
 )
 
-# SIMD public headers
 install(DIRECTORY compute/simd/
     DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/obsidian/compute/simd
     COMPONENT development
     FILES_MATCHING PATTERN "*.hpp" PATTERN "*.h"
 )
 
-# Generated export headers (reside in binary directory)
 install(FILES
     "${PROJECT_BINARY_DIR}/kernel/obsidian_kernel_export.h"
     DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/obsidian/kernel
@@ -59,9 +49,7 @@ install(FILES
     OPTIONAL
 )
 
-# ── 3. CMake Package Configuration Exports ──────────────────────────────────
-# Enables find_package(Obsidian CONFIG REQUIRED) in downstream consumers.
-
+# CMake export configuration
 write_basic_package_version_file(
     "${CMAKE_CURRENT_BINARY_DIR}/ObsidianConfigVersion.cmake"
     VERSION ${PROJECT_VERSION}
@@ -87,8 +75,7 @@ install(FILES
     COMPONENT development
 )
 
-# ── 4. CPack Configuration & Multi-Threaded Compression ─────────────────────
-
+# CPack packaging
 set(CPACK_PACKAGE_NAME "obsidian")
 set(CPACK_PACKAGE_VERSION "${PROJECT_VERSION}")
 set(CPACK_PACKAGE_DESCRIPTION_SUMMARY "High-performance quantitative finance platform")
@@ -96,15 +83,13 @@ set(CPACK_PACKAGE_VENDOR "AlphaSparrow")
 set(CPACK_PACKAGE_LICENSE "Apache-2.0")
 set(CPACK_RESOURCE_FILE_LICENSE "${CMAKE_SOURCE_DIR}/LICENSE")
 
-# Parallel archive compression (utilize all available CPU cores)
+# Parallel archive compression
 set(CPACK_ARCHIVE_THREADS 0)
 
-# Strip release binaries to eliminate debug symbol overhead in deployment payloads
 if(NOT CMAKE_BUILD_TYPE STREQUAL "Debug")
     set(CPACK_STRIP_FILES TRUE)
 endif()
 
-# Component groupings
 set(CPACK_COMPONENTS_ALL runtime development)
 
 set(CPACK_COMPONENT_RUNTIME_DISPLAY_NAME "Obsidian Application & Runtime")
@@ -115,7 +100,6 @@ set(CPACK_COMPONENT_DEVELOPMENT_DISPLAY_NAME "Obsidian C++ SDK")
 set(CPACK_COMPONENT_DEVELOPMENT_DESCRIPTION  "Static libraries, exported headers, and CMake config modules.")
 set(CPACK_COMPONENT_DEVELOPMENT_DEPENDS      runtime)
 
-# Platform-specific package generators
 if(OBSIDIAN_PLATFORM STREQUAL "linux")
     set(CPACK_GENERATOR "TGZ;DEB;RPM")
     set(CPACK_DEBIAN_PACKAGE_MAINTAINER "AlphaSparrow")
@@ -129,7 +113,6 @@ elseif(OBSIDIAN_PLATFORM STREQUAL "windows")
     set(CPACK_NSIS_ENABLE_UNINSTALL_BEFORE_INSTALL ON)
 endif()
 
-# Source package generator & exclusions
 set(CPACK_SOURCE_GENERATOR "TGZ")
 set(CPACK_SOURCE_IGNORE_FILES
     "/build/"
@@ -144,7 +127,7 @@ set(CPACK_SOURCE_IGNORE_FILES
     "\\.cmake_install\\.cmake"
     "/__pycache__/"
     "\\.pyc$"
-    "/target/"          # Rust build output
+    "/target/"
     "\\.DS_Store$"
     "\\.o$"
     "\\.obj$"
