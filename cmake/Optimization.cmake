@@ -119,6 +119,9 @@ endif()
 # ── 6. Codegen & Cache Alignment Optimization ────────────────────────────────
 
 if(NOT MSVC)
+    # Stream compiler intermediate stages via memory pipes instead of temporary disk files
+    target_compile_options(obsidian_tuning INTERFACE -pipe)
+
     # Align functions to 64-byte cache line boundaries to avoid instruction cache line splits
     # Align loops to 32 bytes for efficient branch target buffering
     target_compile_options(obsidian_tuning INTERFACE
@@ -150,6 +153,12 @@ if(NOT MSVC)
         )
     endif()
 else()
+    # Multi-processor compilation across source files & eliminate unreferenced inline COMDAT symbols
+    target_compile_options(obsidian_tuning INTERFACE
+        /MP
+        /Zc:inline
+    )
+
     # MSVC equivalent for dead code stripping and function-level linking
     target_compile_options(obsidian_tuning INTERFACE
         $<$<CONFIG:Release,RelWithDebInfo>:/Gy /Gw>

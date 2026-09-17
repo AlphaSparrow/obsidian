@@ -107,8 +107,9 @@ if(OBSIDIAN_ENABLE_RUST)
 endif()
 
 # ── Precompiled Headers (PCH) for Acceleration ──────────────────────────────
-
-target_precompile_headers(obsidian_kernel PRIVATE
+# Precompile the heavy standard library headers once on memory subsystem
+# and reuse the parsed AST across all kernel translation units.
+target_precompile_headers(obsidian_kernel_memory PRIVATE
     <atomic>
     <chrono>
     <cstdint>
@@ -118,6 +119,9 @@ target_precompile_headers(obsidian_kernel PRIVATE
     <string_view>
     <type_traits>
 )
+
+target_precompile_headers(obsidian_kernel_concurrency REUSE_FROM obsidian_kernel_memory)
+target_precompile_headers(obsidian_kernel_logging REUSE_FROM obsidian_kernel_memory)
 
 # ── Export Header Generation ────────────────────────────────────────────────
 

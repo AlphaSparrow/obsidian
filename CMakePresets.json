@@ -131,27 +131,33 @@
     "buildPresets": [
         {
             "name": "dev",
-            "configurePreset": "dev"
+            "configurePreset": "dev",
+            "jobs": 0
         },
         {
             "name": "perf",
-            "configurePreset": "perf"
+            "configurePreset": "perf",
+            "jobs": 0
         },
         {
             "name": "release-native",
-            "configurePreset": "release-native"
+            "configurePreset": "release-native",
+            "jobs": 0
         },
         {
             "name": "ci-linux-x64",
-            "configurePreset": "ci-linux-x64"
+            "configurePreset": "ci-linux-x64",
+            "jobs": 0
         },
         {
             "name": "ci-windows-x64",
-            "configurePreset": "ci-windows-x64"
+            "configurePreset": "ci-windows-x64",
+            "jobs": 0
         },
         {
             "name": "ci-macos-universal",
-            "configurePreset": "ci-macos-universal"
+            "configurePreset": "ci-macos-universal",
+            "jobs": 0
         }
     ],
     "packagePresets": [
@@ -191,6 +197,23 @@
             "configurePreset": "ci-macos-universal",
             "generators": [
                 "TGZ"
+            ]
+        }
+    ],
+    "workflowPresets": [
+        {
+            "name": "dev-substage",
+            "displayName": "Fast Incremental Substage",
+            "description": "Streamlined build pipeline substage: incremental configure and maximum parallel compilation",
+            "steps": [
+                {
+                    "type": "configure",
+                    "name": "dev"
+                },
+                {
+                    "type": "build",
+                    "name": "dev"
+                }
             ]
         }
     ]
