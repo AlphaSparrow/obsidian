@@ -24,14 +24,22 @@
 #define OBSIDIAN_NODISCARD
 #endif
 
+#if defined(_MSC_VER)
+#define OBSIDIAN_FORCE_INLINE __forceinline
+#define OBSIDIAN_COMPILER_BARRIER() _ReadWriteBarrier()
+#else
+#define OBSIDIAN_FORCE_INLINE inline __attribute__((always_inline))
+#define OBSIDIAN_COMPILER_BARRIER() asm volatile("" ::: "memory")
+#endif
+
 namespace obsidian {
 namespace kernel {
 namespace concurrency {
 
 static constexpr size_t kCacheLineSize = 64;
 
-// Architecture-specific CPU pause instruction for spin loops
-inline void cpu_pause() noexcept {
+/// Architecture-specific CPU pause instruction for low-latency spin loops
+OBSIDIAN_FORCE_INLINE void cpu_pause() noexcept {
 #if defined(__x86_64__) || defined(_M_X64) || defined(__i386__) || defined(_M_IX86)
     _mm_pause();
 #elif defined(__arm__) || defined(__aarch64__)
@@ -43,8 +51,8 @@ inline void cpu_pause() noexcept {
 #endif
 }
 
-// Relinquish remaining CPU timeslice
-inline void thread_yield() noexcept {
+/// Relinquish remaining CPU timeslice
+OBSIDIAN_FORCE_INLINE void thread_yield() noexcept {
 #if defined(_WIN32)
     SwitchToThread();
 #else
@@ -52,8 +60,8 @@ inline void thread_yield() noexcept {
 #endif
 }
 
-// Read CPU timestamp counter for benchmarking
-inline uint64_t read_tsc() noexcept {
+/// Read CPU timestamp counter for high-precision benchmarking
+OBSIDIAN_FORCE_INLINE uint64_t read_tsc() noexcept {
 #if defined(_MSC_VER)
     return __rdtsc();
 #elif defined(__x86_64__) || defined(__i386__)
@@ -69,7 +77,7 @@ inline uint64_t read_tsc() noexcept {
 #endif
 }
 
-// Adaptive exponential backoff for spin loops
+/// Adaptive exponential backoff for spin loops (pause -> multi-pause -> yield)
 class SpinWait {
 public:
     SpinWait() = default;
@@ -99,24 +107,44 @@ private:
     uint32_t count_{0};
 };
 
-// Lightweight spinlock
+/// Lightweight Test-and-Test-and-Set (TTAS) SpinLock
 class SpinLock {
 public:
+    SpinLock() = default;
+
     void lock() noexcept {
-        while (flag_.test_and_set(std::memory_order_acquire)) {
-            cpu_pause();
+        for (;;) {
+            if (!flag_.test_and_set(std::memory_order_acquire)) {
+                return;
+            }
+            while (locked_.load(std::memory_order_relaxed)) {
+                cpu_pause();
+            }
         }
     }
 
+    OBSIDIAN_NODISCARD bool try_lock() noexcept {
+        if (!flag_.test_and_set(std::memory_order_acquire)) {
+            locked_.store(true, std::memory_order_relaxed);
+            return true;
+        }
+        return false;
+    }
+
     void unlock() noexcept {
+        locked_.store(false, std::memory_order_relaxed);
         flag_.clear(std::memory_order_release);
     }
 
+    SpinLock(const SpinLock&) = delete;
+    SpinLock& operator=(const SpinLock&) = delete;
+
 private:
     std::atomic_flag flag_ = ATOMIC_FLAG_INIT;
+    std::atomic<bool> locked_{false};
 };
 
-// RAII lock guard for SpinLock
+/// RAII lock guard for SpinLock
 class SpinLockGuard {
 public:
     explicit SpinLockGuard(SpinLock& lock) noexcept : lock_(lock) {
@@ -134,7 +162,71 @@ private:
     SpinLock& lock_;
 };
 
-// Cache-padded wrapper to isolate variables onto their own cache line
+/// Fair FIFO Ticket Lock preventing thread starvation
+class TicketLock {
+public:
+    TicketLock() : ticket_(0), serving_(0) {}
+
+    void lock() noexcept {
+        const uint32_t my_ticket = ticket_.fetch_add(1, std::memory_order_relaxed);
+        while (serving_.load(std::memory_order_acquire) != my_ticket) {
+            cpu_pause();
+        }
+    }
+
+    OBSIDIAN_NODISCARD bool try_lock() noexcept {
+        uint32_t s = serving_.load(std::memory_order_acquire);
+        uint32_t t = ticket_.load(std::memory_order_relaxed);
+        if (s != t) return false;
+        return ticket_.compare_exchange_strong(t, t + 1, std::memory_order_acquire, std::memory_order_relaxed);
+    }
+
+    void unlock() noexcept {
+        serving_.fetch_add(1, std::memory_order_release);
+    }
+
+private:
+    alignas(kCacheLineSize) std::atomic<uint32_t> ticket_;
+    alignas(kCacheLineSize) std::atomic<uint32_t> serving_;
+};
+
+/// Sequential Lock (SeqLock) for single-writer, optimistic wait-free multi-reader access.
+class SeqLock {
+public:
+    SeqLock() : sequence_(0) {}
+
+    OBSIDIAN_NODISCARD uint32_t read_begin() const noexcept {
+        for (;;) {
+            uint32_t seq = sequence_.load(std::memory_order_acquire);
+            if ((seq & 1) == 0) {
+                return seq;
+            }
+            cpu_pause();
+        }
+    }
+
+    OBSIDIAN_NODISCARD bool read_retry(uint32_t start_seq) const noexcept {
+        std::atomic_thread_fence(std::memory_order_acquire);
+        return sequence_.load(std::memory_order_relaxed) != start_seq;
+    }
+
+    void write_lock() noexcept {
+        spin_.lock();
+        sequence_.fetch_add(1, std::memory_order_relaxed);
+        std::atomic_thread_fence(std::memory_order_release);
+    }
+
+    void write_unlock() noexcept {
+        sequence_.fetch_add(1, std::memory_order_release);
+        spin_.unlock();
+    }
+
+private:
+    alignas(kCacheLineSize) std::atomic<uint32_t> sequence_;
+    SpinLock spin_;
+};
+
+/// Cache-padded wrapper to isolate variables onto their own cache line and eliminate false sharing
 template <typename T>
 struct alignas(kCacheLineSize) CachePadded {
     T value;

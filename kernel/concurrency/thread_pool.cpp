@@ -1,135 +1,83 @@
-#include "atomic_utils.hpp"
-
-#include <atomic>
-#include <cstddef>
-#include <functional>
-#include <memory>
-#include <vector>
-
-#if defined(_WIN32)
-#ifndef WIN32_LEAN_AND_MEAN
-#define WIN32_LEAN_AND_MEAN
-#endif
-#include <windows.h>
-#else
-#include <pthread.h>
-#endif
+#include "thread_pool.hpp"
 
 namespace obsidian {
 namespace kernel {
 namespace concurrency {
 
-/// Low-overhead platform thread abstraction.
-/// Eliminates dependency on compiler POSIX emulation layers while guaranteeing
-/// deterministic thread creation and hardware affinity mapping.
-class Thread {
-public:
-    template <typename F>
-    explicit Thread(F&& f) {
-        auto* func = new std::function<void()>(std::forward<F>(f));
+namespace {
+thread_local int tl_worker_id = -1;
+}
+
+ThreadPool::ThreadPool(size_t thread_count)
+    : thread_count_(thread_count == 0 ? Thread::hardware_concurrency() : thread_count),
+      stopping_(false),
+      global_queue_(thread_count_ * 256) {
 #if defined(_WIN32)
-        handle_ = CreateThread(nullptr, 0, &Thread::run_win32, func, 0, nullptr);
-#else
-        pthread_create(&handle_, nullptr, &Thread::run_posix, func);
-        has_handle_ = true;
-#endif
-    }
-
-    ~Thread() {
-        join();
-    }
-
-    Thread(const Thread&) = delete;
-    Thread& operator=(const Thread&) = delete;
-
-    Thread(Thread&& other) noexcept
-#if defined(_WIN32)
-        : handle_(other.handle_) {
-        other.handle_ = nullptr;
-    }
-#else
-        : handle_(other.handle_), has_handle_(other.has_handle_) {
-        other.has_handle_ = false;
-    }
+    wake_event_ = CreateEvent(nullptr, FALSE, FALSE, nullptr);
 #endif
 
-    void join() noexcept {
+    local_queues_.reserve(thread_count_);
+    for (size_t i = 0; i < thread_count_; ++i) {
+        local_queues_.emplace_back(new WorkStealingDeque<Task>(1024));
+    }
+
+    workers_.reserve(thread_count_);
+    for (size_t i = 0; i < thread_count_; ++i) {
+        workers_.emplace_back([this, i]() {
+            worker_loop(i);
+        });
+        workers_.back().set_affinity(i);
+    }
+}
+
+ThreadPool::~ThreadPool() {
+    shutdown();
 #if defined(_WIN32)
-        if (handle_) {
-            WaitForSingleObject(handle_, INFINITE);
-            CloseHandle(handle_);
-            handle_ = nullptr;
-        }
-#else
-        if (has_handle_) {
-            pthread_join(handle_, nullptr);
-            has_handle_ = false;
-        }
+    if (wake_event_) {
+        CloseHandle(wake_event_);
+        wake_event_ = nullptr;
+    }
 #endif
+}
+
+void ThreadPool::submit_internal(Task task) {
+    if (stopping_.load(std::memory_order_relaxed)) {
+        return;
     }
 
-    OBSIDIAN_NODISCARD bool joinable() const noexcept {
+    if (tl_worker_id >= 0 && static_cast<size_t>(tl_worker_id) < thread_count_) {
+        if (local_queues_[tl_worker_id]->push_bottom(std::move(task))) {
 #if defined(_WIN32)
-        return handle_ != nullptr;
-#else
-        return has_handle_;
+            if (idle_workers_.load(std::memory_order_relaxed) > 0) {
+                SetEvent(wake_event_);
+            }
 #endif
-    }
-
-private:
-#if defined(_WIN32)
-    static DWORD WINAPI run_win32(LPVOID param) {
-        auto* func = static_cast<std::function<void()>*>(param);
-        (*func)();
-        delete func;
-        return 0;
-    }
-    HANDLE handle_{nullptr};
-#else
-    static void* run_posix(void* param) {
-        auto* func = static_cast<std::function<void()>*>(param);
-        (*func)();
-        delete func;
-        return nullptr;
-    }
-    pthread_t handle_{};
-    bool has_handle_{false};
-#endif
-};
-
-// Work-stealing thread pool
-class ThreadPool {
-public:
-    using Task = std::function<void()>;
-
-    explicit ThreadPool(size_t thread_count = 4)
-        : thread_count_(thread_count < 1 ? 1 : thread_count),
-          stopping_(false) {
-        workers_.reserve(thread_count_);
-        for (size_t i = 0; i < thread_count_; ++i) {
-            workers_.emplace_back([this]() {
-                worker_loop();
-            });
+            return;
         }
     }
 
-    ~ThreadPool() {
-        shutdown();
-    }
-
-    ThreadPool(const ThreadPool&) = delete;
-    ThreadPool& operator=(const ThreadPool&) = delete;
-
-    template <typename F>
-    void submit(F&& f) {
-        {
-            SpinLockGuard lock(lock_);
-            queue_.emplace_back(std::forward<F>(f));
+    while (!global_queue_.enqueue(task)) {
+        if (stopping_.load(std::memory_order_relaxed)) {
+            return;
         }
+        cpu_pause();
     }
 
-    void shutdown() {
-        stopping_.store(true, std::memory_order_release);
+#if defined(_WIN32)
+    if (idle_workers_.load(std::memory_order_relaxed) > 0) {
+        SetEvent(wake_event_);
+    }
+#endif
+}
+
+void ThreadPool::shutdown() {
+    bool expected = false;
+    if (stopping_.compare_exchange_strong(expected, true, std::memory_order_release)) {
+#if defined(_WIN32)
+        if (wake_event_) {
+            SetEvent(wake_event_);
+        }
+#endif
         for (auto& worker : workers_) {
             if (worker.joinable()) {
                 worker.join();
@@ -137,37 +85,78 @@ public:
         }
         workers_.clear();
     }
+}
 
-    OBSIDIAN_NODISCARD size_t thread_count() const noexcept { return thread_count_; }
+void ThreadPool::worker_loop(size_t worker_id) {
+    tl_worker_id = static_cast<int>(worker_id);
+    WorkStealingDeque<Task>& my_deque = *local_queues_[worker_id];
 
-private:
-    void worker_loop() {
-        SpinWait backoff;
-        while (!stopping_.load(std::memory_order_relaxed)) {
-            Task task;
-            {
-                SpinLockGuard lock(lock_);
-                if (!queue_.empty()) {
-                    task = std::move(queue_.front());
-                    queue_.erase(queue_.begin());
+    uint32_t rng_state = static_cast<uint32_t>(worker_id * 1664525u + 1013904223u + read_tsc());
+    auto fast_rand = [&rng_state](uint32_t max_val) -> uint32_t {
+        rng_state ^= rng_state << 13;
+        rng_state ^= rng_state >> 17;
+        rng_state ^= rng_state << 5;
+        return max_val > 0 ? (rng_state % max_val) : 0;
+    };
+
+    SpinWait spin_wait;
+    const uint32_t max_spins = 64;
+
+    while (!stopping_.load(std::memory_order_relaxed)) {
+        Task task;
+
+        // 1. Pop from local deque (LIFO - cache warmth)
+        if (my_deque.pop_bottom(task)) {
+            task();
+            spin_wait.reset();
+            continue;
+        }
+
+        // 2. Pop from global injection queue (FIFO)
+        if (global_queue_.dequeue(task)) {
+            task();
+            spin_wait.reset();
+            continue;
+        }
+
+        // 3. Steal work from peer workers (FIFO)
+        bool stolen = false;
+        if (thread_count_ > 1) {
+            const size_t victim_start = fast_rand(static_cast<uint32_t>(thread_count_));
+            for (size_t attempt = 0; attempt < thread_count_; ++attempt) {
+                const size_t victim = (victim_start + attempt) % thread_count_;
+                if (victim != worker_id && local_queues_[victim]->steal_top(task)) {
+                    stolen = true;
+                    break;
                 }
             }
-
-            if (task) {
-                task();
-                backoff.reset();
-            } else {
-                backoff.spin();
-            }
         }
-    }
 
-    size_t thread_count_;
-    std::atomic<bool> stopping_;
-    SpinLock lock_;
-    std::vector<Task> queue_;
-    std::vector<Thread> workers_;
-};
+        if (stolen) {
+            task();
+            spin_wait.reset();
+            continue;
+        }
+
+        // 4. Spin wait backoff
+        if (spin_wait.count() < max_spins) {
+            spin_wait.spin();
+            continue;
+        }
+
+        // 5. Park idle worker on event
+        idle_workers_.fetch_add(1, std::memory_order_relaxed);
+#if defined(_WIN32)
+        if (wake_event_ && !stopping_.load(std::memory_order_relaxed)) {
+            WaitForSingleObject(wake_event_, 1);
+        }
+#else
+        thread_yield();
+#endif
+        idle_workers_.fetch_sub(1, std::memory_order_relaxed);
+        spin_wait.reset();
+    }
+}
 
 } // namespace concurrency
 } // namespace kernel

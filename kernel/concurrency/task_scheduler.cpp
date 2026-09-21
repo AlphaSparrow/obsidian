@@ -1,104 +1,103 @@
-#include "atomic_utils.hpp"
-
-#include <chrono>
-#include <cstdint>
-#include <functional>
-#include <queue>
-#include <vector>
+#include "task_scheduler.hpp"
 
 namespace obsidian {
 namespace kernel {
 namespace concurrency {
 
-enum class TaskPriority : uint8_t {
-    RealTime = 0,   // Critical sub-millisecond execution tasks
-    Normal   = 1,   // Standard application tasks
-    Low      = 2    // Background analytical & telemetry tasks
-};
+TaskScheduler::TaskScheduler() : next_sequence_(0) {}
 
-struct ScheduledTask {
-    std::function<void()> work;
-    std::chrono::steady_clock::time_point deadline;
-    TaskPriority priority;
-    uint64_t sequence_id;
+void TaskScheduler::schedule(std::function<void()> task, TaskPriority priority) {
+    if (!task) return;
 
-    bool operator>(const ScheduledTask& other) const noexcept {
-        if (priority != other.priority) {
-            return static_cast<uint8_t>(priority) > static_cast<uint8_t>(other.priority);
-        }
-        if (deadline != other.deadline) {
-            return deadline > other.deadline;
-        }
-        return sequence_id > other.sequence_id;
+    SpinLockGuard guard(lock_);
+    switch (priority) {
+        case TaskPriority::RealTime:
+            realtime_lane_.push_back(std::move(task));
+            break;
+        case TaskPriority::Normal:
+            normal_lane_.push_back(std::move(task));
+            break;
+        case TaskPriority::Low:
+            low_lane_.push_back(std::move(task));
+            break;
     }
-};
+}
 
-/// Latency-Budgeted Task Scheduler.
-///
-/// DDIA Chapter 1 (Service Level Objectives & Tail-Latency Management):
-/// Prioritizes hard-deadline real-time transactions ahead of batch computations,
-/// preventing tail-latency SLA violations under heavy system load.
-/// Employs non-blocking SpinLock synchronization to avoid OS kernel scheduler hops.
-class TaskScheduler {
-public:
-    TaskScheduler() : next_sequence_(0) {}
+void TaskScheduler::schedule_at(std::function<void()> task,
+                                std::chrono::steady_clock::time_point deadline,
+                                TaskPriority priority) {
+    if (!task) return;
 
-    void schedule(std::function<void()> task, TaskPriority priority = TaskPriority::Normal) {
-        schedule_delayed(std::move(task), std::chrono::milliseconds(0), priority);
-    }
+    SpinLockGuard guard(lock_);
+    delayed_queue_.push(ScheduledTask{
+        std::move(task),
+        deadline,
+        priority,
+        ++next_sequence_
+    });
+}
 
-    void schedule_delayed(std::function<void()> task, std::chrono::milliseconds delay, TaskPriority priority = TaskPriority::Normal) {
-        const auto deadline = std::chrono::steady_clock::now() + delay;
-        SpinLockGuard lock(spinlock_);
-        task_queue_.push(ScheduledTask{
-            std::move(task),
-            deadline,
-            priority,
-            ++next_sequence_
-        });
-    }
+size_t TaskScheduler::poll_ready(size_t max_tasks) {
+    const auto now = std::chrono::steady_clock::now();
+    size_t executed = 0;
 
-    /// Polls and runs all ready tasks up to current timestamp.
-    /// Returns the count of tasks executed.
-    size_t poll_ready(size_t max_tasks = 64) {
-        const auto now = std::chrono::steady_clock::now();
-        size_t executed = 0;
+    // Buffer to hold popped tasks to execute outside the lock to minimize lock contention
+    std::vector<std::function<void()>> batch;
+    batch.reserve(max_tasks);
 
-        while (executed < max_tasks) {
-            std::function<void()> task_to_run;
-            {
-                SpinLockGuard lock(spinlock_);
-                if (task_queue_.empty()) {
+    {
+        SpinLockGuard guard(lock_);
+
+        // 1. Drain matured delayed tasks into priority lanes
+        while (!delayed_queue_.empty() && delayed_queue_.top().deadline <= now) {
+            auto& top_task = const_cast<ScheduledTask&>(delayed_queue_.top());
+            switch (top_task.priority) {
+                case TaskPriority::RealTime:
+                    realtime_lane_.push_back(std::move(top_task.work));
                     break;
-                }
-
-                if (task_queue_.top().deadline > now) {
+                case TaskPriority::Normal:
+                    normal_lane_.push_back(std::move(top_task.work));
                     break;
-                }
-
-                task_to_run = std::move(const_cast<ScheduledTask&>(task_queue_.top()).work);
-                task_queue_.pop();
+                case TaskPriority::Low:
+                    low_lane_.push_back(std::move(top_task.work));
+                    break;
             }
-
-            if (task_to_run) {
-                task_to_run();
-                ++executed;
-            }
+            delayed_queue_.pop();
         }
 
-        return executed;
+        // 2. Fetch tasks in priority order: RealTime -> Normal -> Low
+        auto extract_lane = [&](std::vector<std::function<void()>>& lane) {
+            while (!lane.empty() && batch.size() < max_tasks) {
+                batch.push_back(std::move(lane.back()));
+                lane.pop_back();
+            }
+        };
+
+        extract_lane(realtime_lane_);
+        if (batch.size() < max_tasks) {
+            extract_lane(normal_lane_);
+        }
+        if (batch.size() < max_tasks) {
+            extract_lane(low_lane_);
+        }
     }
 
-    OBSIDIAN_NODISCARD size_t pending_tasks() {
-        SpinLockGuard lock(spinlock_);
-        return task_queue_.size();
+    // 3. Execute tasks with lock released!
+    for (auto& task : batch) {
+        if (task) {
+            task();
+            ++executed;
+        }
     }
 
-private:
-    SpinLock spinlock_;
-    std::priority_queue<ScheduledTask, std::vector<ScheduledTask>, std::greater<ScheduledTask>> task_queue_;
-    uint64_t next_sequence_;
-};
+    total_executed_.fetch_add(executed, std::memory_order_relaxed);
+    return executed;
+}
+
+size_t TaskScheduler::pending_tasks() const noexcept {
+    SpinLockGuard guard(lock_);
+    return delayed_queue_.size() + realtime_lane_.size() + normal_lane_.size() + low_lane_.size();
+}
 
 } // namespace concurrency
 } // namespace kernel

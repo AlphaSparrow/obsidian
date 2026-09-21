@@ -386,7 +386,21 @@ impl ActorRuntime {
             }
         }
 
-        processed_total
+    /// Dispatches a batch of messages to an actor with minimal atomic contention.
+    pub fn send_batch(&mut self, actor_id: u64, messages: &[ActorMessage]) -> usize {
+        let mut count = 0;
+        for msg in messages {
+            if self.send(actor_id, msg) == ACTOR_SUCCESS {
+                count += 1;
+            } else {
+                break;
+            }
+        }
+        count
+    }
+
+    pub fn total_active(&self) -> usize {
+        self.active_actors.load(Ordering::Relaxed)
     }
 
     pub fn shutdown(&mut self) {
@@ -438,6 +452,22 @@ pub unsafe extern "C" fn obsidian_actor_send(
     }
     let rt = &mut *runtime;
     rt.send(actor_id, &*msg)
+}
+
+/// Dispatches a batch of messages to an actor.
+#[no_mangle]
+pub unsafe extern "C" fn obsidian_actor_send_batch(
+    runtime: *mut ActorRuntime,
+    actor_id: u64,
+    msgs: *const ActorMessage,
+    count: usize,
+) -> usize {
+    if runtime.is_null() || msgs.is_null() || count == 0 {
+        return 0;
+    }
+    let slice = core::slice::from_raw_parts(msgs, count);
+    let rt = &mut *runtime;
+    rt.send_batch(actor_id, slice)
 }
 
 /// Polls and runs scheduled actor tasks up to `max_messages`. Returns count of messages executed.
