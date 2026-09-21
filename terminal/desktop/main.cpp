@@ -10,9 +10,9 @@ int main(int argc, char* argv[]) {
     (void)argv;
 
     obsidian::desktop::AppConfig config;
-    config.title = "Obsidian Quantitative Platform";
-    config.width = 1280;
-    config.height = 800;
+    config.title = L"Obsidian Terminal";
+    config.width = 1440;
+    config.height = 900;
 
     obsidian::desktop::App app;
     if (!app.initialize(config)) {
@@ -28,6 +28,6 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
     (void)hPrevInstance;
     (void)lpCmdLine;
     (void)nCmdShow;
-    return main(__argc, __argv);
+    return main(0, nullptr);
 }
 #endif
