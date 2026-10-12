@@ -126,10 +126,15 @@ StatusOr<std::vector<ManifestEntry>> ManifestManager::ReadManifest(const std::st
 
         if (line.rfind("ENTRY|", 0) == 0) {
             std::vector<std::string> tokens;
-            std::stringstream line_ss(line);
-            std::string token;
-            while (std::getline(line_ss, token, '|')) {
-                tokens.push_back(token);
+            size_t start = 0;
+            while (start <= line.size()) {
+                size_t pos = line.find('|', start);
+                if (pos == std::string::npos) {
+                    tokens.push_back(line.substr(start));
+                    break;
+                }
+                tokens.push_back(line.substr(start, pos - start));
+                start = pos + 1;
             }
 
             if (tokens.size() >= 10) {

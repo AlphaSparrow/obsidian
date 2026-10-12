@@ -8,6 +8,7 @@
 #include <stdexcept>
 #include <cstdint>
 #include <cstdlib>
+#include <initializer_list>
 
 #if defined(_MSC_VER) || defined(__MINGW32__) || defined(__MINGW64__)
 #include <malloc.h>
@@ -17,49 +18,79 @@ namespace obsidian {
 namespace storage {
 namespace arrow {
 
-// Aligned allocator ensuring 64-byte cache line alignment for SIMD / AVX compatibility
-template <typename T, size_t Alignment = 64>
-class AlignedAllocator {
+// Aligned RAII buffer ensuring 64-byte cache line alignment for SIMD / AVX compatibility
+class AlignedBuffer {
 public:
-    using value_type = T;
-
-    AlignedAllocator() noexcept = default;
-    template <typename U>
-    constexpr AlignedAllocator(const AlignedAllocator<U, Alignment>&) noexcept {}
-
-    T* allocate(size_t n) {
-        if (n == 0) return nullptr;
-        size_t bytes = n * sizeof(T);
-        // Align bytes to multiple of Alignment
-        size_t remainder = bytes % Alignment;
-        if (remainder != 0) {
-            bytes += (Alignment - remainder);
+    explicit AlignedBuffer(size_t bytes, size_t alignment = 64)
+        : size_(bytes), alignment_(alignment) {
+        if (bytes == 0) {
+            data_ = nullptr;
+            return;
+        }
+        size_t alloc_bytes = bytes;
+        size_t rem = alloc_bytes % alignment;
+        if (rem != 0) {
+            alloc_bytes += (alignment - rem);
         }
 #if defined(_MSC_VER) || defined(__MINGW32__) || defined(__MINGW64__)
-        void* ptr = _aligned_malloc(bytes, Alignment);
-        if (!ptr) throw std::bad_alloc();
+        data_ = static_cast<uint8_t*>(_aligned_malloc(alloc_bytes, alignment));
 #else
         void* ptr = nullptr;
-        if (posix_memalign(&ptr, Alignment, bytes) != 0) {
+        if (posix_memalign(&ptr, alignment, alloc_bytes) != 0) {
+            ptr = nullptr;
+        }
+        data_ = static_cast<uint8_t*>(ptr);
+#endif
+        if (!data_) {
             throw std::bad_alloc();
         }
-#endif
-        return static_cast<T*>(ptr);
     }
 
-    void deallocate(T* ptr, size_t) noexcept {
-        if (!ptr) return;
+    ~AlignedBuffer() {
+        if (data_) {
 #if defined(_MSC_VER) || defined(__MINGW32__) || defined(__MINGW64__)
-        _aligned_free(ptr);
+            _aligned_free(data_);
 #else
-        free(ptr);
+            free(data_);
 #endif
+        }
     }
 
-    template <typename U>
-    bool operator==(const AlignedAllocator<U, Alignment>&) const noexcept { return true; }
-    template <typename U>
-    bool operator!=(const AlignedAllocator<U, Alignment>&) const noexcept { return false; }
+    AlignedBuffer(const AlignedBuffer&) = delete;
+    AlignedBuffer& operator=(const AlignedBuffer&) = delete;
+
+    AlignedBuffer(AlignedBuffer&& other) noexcept
+        : data_(other.data_), size_(other.size_), alignment_(other.alignment_) {
+        other.data_ = nullptr;
+        other.size_ = 0;
+    }
+
+    AlignedBuffer& operator=(AlignedBuffer&& other) noexcept {
+        if (this != &other) {
+            if (data_) {
+#if defined(_MSC_VER) || defined(__MINGW32__) || defined(__MINGW64__)
+                _aligned_free(data_);
+#else
+                free(data_);
+#endif
+            }
+            data_ = other.data_;
+            size_ = other.size_;
+            alignment_ = other.alignment_;
+            other.data_ = nullptr;
+            other.size_ = 0;
+        }
+        return *this;
+    }
+
+    [[nodiscard]] uint8_t* data() noexcept { return data_; }
+    [[nodiscard]] const uint8_t* data() const noexcept { return data_; }
+    [[nodiscard]] size_t size() const noexcept { return size_; }
+
+private:
+    uint8_t* data_{nullptr};
+    size_t size_{0};
+    size_t alignment_{64};
 };
 
 class IColumnVector {
@@ -76,17 +107,22 @@ public:
 template <typename T>
 class ColumnVector : public IColumnVector {
 public:
-    using Allocator = AlignedAllocator<T, 64>;
+    ColumnVector(schema::DataType type, const T* data, size_t count, std::vector<uint8_t> null_bitmap = {})
+        : type_(type), offset_(0), length_(count), null_bitmap_(std::move(null_bitmap)) {
+        buffer_ = std::make_shared<AlignedBuffer>(count * sizeof(T), 64);
+        if (data && count > 0) {
+            std::memcpy(buffer_->data(), data, count * sizeof(T));
+        }
+    }
 
-    ColumnVector(schema::DataType type, std::vector<T, Allocator> data, std::vector<uint8_t> null_bitmap = {})
-        : type_(type), data_(std::move(data)), null_bitmap_(std::move(null_bitmap)), 
-          offset_(0), length_(data_.size()) {}
+    ColumnVector(schema::DataType type, std::initializer_list<T> list, std::vector<uint8_t> null_bitmap = {})
+        : ColumnVector(type, std::data(list), list.size(), std::move(null_bitmap)) {}
 
     // View constructor for zero-copy slicing
-    ColumnVector(schema::DataType type, std::shared_ptr<const std::vector<T, Allocator>> shared_data,
+    ColumnVector(schema::DataType type, std::shared_ptr<AlignedBuffer> buffer,
                  size_t offset, size_t length, std::vector<uint8_t> null_bitmap = {})
-        : type_(type), shared_data_(std::move(shared_data)),
-          offset_(offset), length_(length), null_bitmap_(std::move(null_bitmap)) {}
+        : type_(type), buffer_(std::move(buffer)), offset_(offset), length_(length),
+          null_bitmap_(std::move(null_bitmap)) {}
 
     [[nodiscard]] schema::DataType type() const noexcept override {
         return type_;
@@ -113,7 +149,8 @@ public:
     }
 
     [[nodiscard]] const void* raw_data() const noexcept override {
-        const T* base_ptr = shared_data_ ? shared_data_->data() : data_.data();
+        if (!buffer_ || !buffer_->data()) return nullptr;
+        const T* base_ptr = reinterpret_cast<const T*>(buffer_->data());
         return static_cast<const void*>(base_ptr + offset_);
     }
 
@@ -121,7 +158,7 @@ public:
         if (index >= length_) {
             throw std::out_of_range("Index out of range in ColumnVector");
         }
-        const T* base_ptr = shared_data_ ? shared_data_->data() : data_.data();
+        const T* base_ptr = reinterpret_cast<const T*>(buffer_->data());
         return base_ptr[offset_ + index];
     }
 
@@ -129,21 +166,12 @@ public:
         if (offset + length > length_) {
             throw std::out_of_range("Slice range exceeds vector bounds");
         }
-
-        std::shared_ptr<const std::vector<T, Allocator>> parent_data;
-        if (shared_data_) {
-            parent_data = shared_data_;
-        } else {
-            parent_data = std::make_shared<const std::vector<T, Allocator>>(data_);
-        }
-
-        return std::make_shared<ColumnVector<T>>(type_, parent_data, offset_ + offset, length, null_bitmap_);
+        return std::make_shared<ColumnVector<T>>(type_, buffer_, offset_ + offset, length, null_bitmap_);
     }
 
 private:
     schema::DataType type_;
-    std::vector<T, Allocator> data_;
-    std::shared_ptr<const std::vector<T, Allocator>> shared_data_;
+    std::shared_ptr<AlignedBuffer> buffer_;
     size_t offset_{0};
     size_t length_{0};
     std::vector<uint8_t> null_bitmap_;
