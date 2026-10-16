@@ -13,9 +13,10 @@
 set(CMAKE_SYSTEM_NAME    Windows)
 set(CMAKE_SYSTEM_PROCESSOR AMD64)
 
-# Force the x64 host and target architecture.
-# This avoids the common mistake of building x86 on a 64-bit host.
-set(CMAKE_GENERATOR_PLATFORM x64)
+# Force the x64 host and target architecture when using VS generators.
+if(CMAKE_GENERATOR MATCHES "Visual Studio")
+    set(CMAKE_GENERATOR_PLATFORM x64)
+endif()
 
 # CRT linkage — static (/MT) by default.  Override via CMAKE_MSVC_RUNTIME_LIBRARY.
 if(NOT DEFINED CMAKE_MSVC_RUNTIME_LIBRARY)
