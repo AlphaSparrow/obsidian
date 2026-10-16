@@ -1,118 +1,118 @@
-name: Obsidian CI / CD Pipeline
+name: "Obsidian CI / CD Pipeline"
 
 on:
   push:
-    branches: [ main, master ]
+    branches: [ "main", "master" ]
   pull_request:
-    branches: [ main, master ]
+    branches: [ "main", "master" ]
   workflow_dispatch:
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  group: "${{ github.workflow }}-${{ github.ref }}"
   cancel-in-progress: true
 
 jobs:
   build-and-test-linux:
-    name: Linux x86_64 (GCC / Clang)
-    runs-on: ubuntu-latest
+    name: "Linux x86_64 (GCC / Clang)"
+    runs-on: "ubuntu-latest"
     steps:
-      - name: Checkout Repository
-        uses: actions/checkout@v4
+      - name: "Checkout Repository"
+        uses: "actions/checkout@v4"
         with:
-          submodules: recursive
+          submodules: "recursive"
 
-      - name: Install Build Dependencies
+      - name: "Install Build Dependencies"
         run: |
           sudo apt-get update
           sudo apt-get install -y cmake ninja-build ccache
 
-      - name: Set up Ccache
-        uses: hendrikmuhs/ccache-action@v1.2
+      - name: "Set up Ccache"
+        uses: "hendrikmuhs/ccache-action@v1.2"
         with:
-          key: ${{ runner.os }}-ccache
+          key: "${{ runner.os }}-ccache"
 
-      - name: Configure CMake (Preset: ci-linux-x64)
-        run: cmake --preset ci-linux-x64
+      - name: "Configure CMake (Preset ci-linux-x64)"
+        run: "cmake --preset ci-linux-x64"
 
-      - name: Build Targets
-        run: cmake --build --preset ci-linux-x64
+      - name: "Build Targets"
+        run: "cmake --build --preset ci-linux-x64"
 
-      - name: Run Tests (CTest)
-        run: ctest --test-dir build/ci-linux-x64 --output-on-failure
+      - name: "Run Tests (CTest)"
+        run: "ctest --test-dir build/ci-linux-x64 --output-on-failure"
 
-      - name: Package Distribution (CPack)
-        run: cpack --preset ci-linux-x64
+      - name: "Package Distribution (CPack)"
+        run: "cpack --preset ci-linux-x64"
 
-      - name: Upload Linux Packages
-        uses: actions/upload-artifact@v4
+      - name: "Upload Linux Packages"
+        uses: "actions/upload-artifact@v4"
         with:
-          name: obsidian-linux-packages
+          name: "obsidian-linux-packages"
           path: |
             build/ci-linux-x64/*.tar.gz
             build/ci-linux-x64/*.deb
-          if-no-files-found: ignore
+          if-no-files-found: "ignore"
 
   build-and-test-windows:
-    name: Windows x64 (MSVC)
-    runs-on: windows-latest
+    name: "Windows x64 (MSVC)"
+    runs-on: "windows-latest"
     steps:
-      - name: Checkout Repository
-        uses: actions/checkout@v4
+      - name: "Checkout Repository"
+        uses: "actions/checkout@v4"
         with:
-          submodules: recursive
+          submodules: "recursive"
 
-      - name: Setup Ninja
-        uses: seanmiddleditch/gha-setup-ninja@v5
+      - name: "Setup Ninja"
+        uses: "seanmiddleditch/gha-setup-ninja@v5"
 
-      - name: Setup MSVC Developer Command Prompt
-        uses: ilammy/msvc-dev-cmd@v1
+      - name: "Setup MSVC Developer Command Prompt"
+        uses: "ilammy/msvc-dev-cmd@v1"
 
-      - name: Configure CMake (Preset: ci-windows-x64)
-        run: cmake --preset ci-windows-x64
+      - name: "Configure CMake (Preset ci-windows-x64)"
+        run: "cmake --preset ci-windows-x64"
 
-      - name: Build Targets
-        run: cmake --build --preset ci-windows-x64
+      - name: "Build Targets"
+        run: "cmake --build --preset ci-windows-x64"
 
-      - name: Run Tests (CTest)
-        run: ctest --test-dir build/ci-windows-x64 --output-on-failure
+      - name: "Run Tests (CTest)"
+        run: "ctest --test-dir build/ci-windows-x64 --output-on-failure"
 
-      - name: Package Distribution (CPack)
-        run: cpack --preset ci-windows-x64
+      - name: "Package Distribution (CPack)"
+        run: "cpack --preset ci-windows-x64"
 
-      - name: Upload Windows Packages
-        uses: actions/upload-artifact@v4
+      - name: "Upload Windows Packages"
+        uses: "actions/upload-artifact@v4"
         with:
-          name: obsidian-windows-packages
-          path: build/ci-windows-x64/*.zip
-          if-no-files-found: ignore
+          name: "obsidian-windows-packages"
+          path: "build/ci-windows-x64/*.zip"
+          if-no-files-found: "ignore"
 
   build-and-test-macos:
-    name: macOS Universal (AppleClang)
-    runs-on: macos-latest
+    name: "macOS Universal (AppleClang)"
+    runs-on: "macos-latest"
     steps:
-      - name: Checkout Repository
-        uses: actions/checkout@v4
+      - name: "Checkout Repository"
+        uses: "actions/checkout@v4"
         with:
-          submodules: recursive
+          submodules: "recursive"
 
-      - name: Install Ninja
-        run: brew install ninja
+      - name: "Install Ninja"
+        run: "brew install ninja"
 
-      - name: Configure CMake (Preset: ci-macos-universal)
-        run: cmake --preset ci-macos-universal
+      - name: "Configure CMake (Preset ci-macos-universal)"
+        run: "cmake --preset ci-macos-universal"
 
-      - name: Build Targets
-        run: cmake --build --preset ci-macos-universal
+      - name: "Build Targets"
+        run: "cmake --build --preset ci-macos-universal"
 
-      - name: Run Tests (CTest)
-        run: ctest --test-dir build/ci-macos-universal --output-on-failure
+      - name: "Run Tests (CTest)"
+        run: "ctest --test-dir build/ci-macos-universal --output-on-failure"
 
-      - name: Package Distribution (CPack)
-        run: cpack --preset ci-macos-universal
+      - name: "Package Distribution (CPack)"
+        run: "cpack --preset ci-macos-universal"
 
-      - name: Upload macOS Packages
-        uses: actions/upload-artifact@v4
+      - name: "Upload macOS Packages"
+        uses: "actions/upload-artifact@v4"
         with:
-          name: obsidian-macos-packages
-          path: build/ci-macos-universal/*.tar.gz
-          if-no-files-found: ignore
+          name: "obsidian-macos-packages"
+          path: "build/ci-macos-universal/*.tar.gz"
+          if-no-files-found: "ignore"
