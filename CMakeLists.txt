@@ -59,6 +59,7 @@ add_subdirectory(storage)
 add_subdirectory(terminal)
 
 if(OBSIDIAN_ENABLE_TESTS)
+    enable_testing()
     add_subdirectory(tests)
 endif()
 

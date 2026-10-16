@@ -1,0 +1,17 @@
+# Build & Output directories
+build/ci-*
+build/dev*
+build/perf*
+build/release*
+install/
+out/
+.cache/
+compile_commands.json
+
+# IDEs & OS
+.vscode/
+.vs/
+*.swp
+*.user
+.DS_Store
+Thumbs.db

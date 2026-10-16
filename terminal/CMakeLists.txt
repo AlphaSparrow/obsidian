@@ -1,6 +1,11 @@
 # Obsidian terminal desktop target
 option(OBSIDIAN_GUI_APP "Build desktop application without persistent console window" ON)
 
+if(NOT WIN32)
+    message(STATUS "[obsidian/terminal] Desktop GUI terminal is Win32-only; skipping GUI target on ${CMAKE_SYSTEM_NAME}")
+    return()
+endif()
+
 set(_terminal_sources
     desktop/main.cpp
     desktop/app.hpp
