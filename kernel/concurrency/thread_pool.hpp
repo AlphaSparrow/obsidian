@@ -14,7 +14,19 @@
 #ifndef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN
 #endif
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
 #include <windows.h>
+#ifdef DeleteFile
+#undef DeleteFile
+#endif
+#ifdef CopyFile
+#undef CopyFile
+#endif
+#ifdef CreateDirectory
+#undef CreateDirectory
+#endif
 #else
 #include <pthread.h>
 #endif

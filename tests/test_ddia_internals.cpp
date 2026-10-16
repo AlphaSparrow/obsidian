@@ -16,6 +16,18 @@
 #include "kernel/concurrency/lockfree_queue.hpp"
 #include "kernel/concurrency/thread_pool.hpp"
 
+#if defined(_WIN32)
+#ifdef DeleteFile
+#undef DeleteFile
+#endif
+#ifdef CopyFile
+#undef CopyFile
+#endif
+#ifdef CreateDirectory
+#undef CreateDirectory
+#endif
+#endif
+
 #include <iostream>
 #include <iomanip>
 #include <vector>
