@@ -1,3 +1,7 @@
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+
 #include "storage/common/status.hpp"
 #include "storage/common/file_system.hpp"
 #include "storage/schema/market_data_schema.hpp"
@@ -389,17 +393,35 @@ void VerifyDDIA_VacuumAndTombstoneCleanup() {
     fs->WriteFileAtomic(active_path, "live_content");
     fs->WriteFileAtomic(dead_path, "dead_content");
 
-    // Add active file to snapshot 1
+    DataFile df_active{};
+    df_active.path = active_path;
+    df_active.format = "parquet";
+    df_active.file_size_bytes = 1000;
+    df_active.record_count = 10;
+
+    DataFile df_dead{};
+    df_dead.path = dead_path;
+    df_dead.format = "parquet";
+    df_dead.file_size_bytes = 1000;
+    df_dead.record_count = 10;
+
+    // Snapshot 1: Add both active and dead files
     {
         auto tx = table->NewTransaction(OperationType::Append);
-        DataFile df{};
-        df.path = active_path;
-        df.format = "parquet";
-        df.file_size_bytes = 1000;
-        df.record_count = 10;
-        tx->AppendFile(df);
+        tx->AppendFile(df_active);
+        tx->AppendFile(df_dead);
         assert(tx->Commit().ok());
     }
+    assert(table->Scan().value().size() == 2);
+
+    // Snapshot 2: Soft deletion marks tombstone entry in manifest
+    {
+        auto tx = table->NewTransaction(OperationType::Delete);
+        tx->DeleteFile(df_dead);
+        assert(tx->Commit().ok());
+    }
+    assert(table->Scan().value().size() == 1);
+    assert(fs->Exists(dead_path).value()); // Exists on disk until vacuumed
 
     // Vacuum with retention 0
     VacuumEngine vacuum_engine(fs);
@@ -412,7 +434,7 @@ void VerifyDDIA_VacuumAndTombstoneCleanup() {
     auto vac_res = vac_or.value();
 
     // Invariant: dead_tombstone is vacuumed, live file is preserved!
-    assert(vac_res.deleted_files_count >= 1);
+    assert(vac_res.deleted_files_count == 1);
     assert(fs->Exists(active_path).value());
     assert(!fs->Exists(dead_path).value());
 
@@ -441,7 +463,9 @@ LatencyStats ComputeStats(std::vector<double>& latencies_us, double total_elapse
 
     auto percentile = [&](double p) -> double {
         size_t idx = static_cast<size_t>(std::ceil(p * static_cast<double>(n))) - 1;
-        idx = std::min(idx, n - 1);
+        if (idx >= n) {
+            idx = n - 1;
+        }
         return latencies_us[idx];
     };
 
