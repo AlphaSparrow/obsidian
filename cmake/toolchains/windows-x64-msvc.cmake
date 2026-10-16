@@ -10,8 +10,14 @@
 #   (or use a CMakePreset that references this file)
 # ---------------------------------------------------------------------------
 
-set(CMAKE_SYSTEM_NAME    Windows)
+if(NOT CMAKE_HOST_SYSTEM_NAME STREQUAL "Windows")
+    set(CMAKE_SYSTEM_NAME Windows)
+endif()
 set(CMAKE_SYSTEM_PROCESSOR AMD64)
+
+# Default to MSVC compiler
+set(CMAKE_C_COMPILER   cl)
+set(CMAKE_CXX_COMPILER cl)
 
 # Force the x64 host and target architecture when using VS generators.
 if(CMAKE_GENERATOR MATCHES "Visual Studio")
