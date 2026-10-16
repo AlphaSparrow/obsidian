@@ -126,6 +126,42 @@
                 "OBSIDIAN_SANITIZER": "none",
                 "OBSIDIAN_ENABLE_TESTS": "ON"
             }
+        },
+        {
+            "name": "ci-linux-sanitizers",
+            "displayName": "CI — Linux x86_64 Sanitizers (ASan + UBSan)",
+            "description": "DDIA memory safety & undefined behavior verification with AddressSanitizer and UBSan",
+            "inherits": "base",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "Debug",
+                "CMAKE_TOOLCHAIN_FILE": "${sourceDir}/cmake/toolchains/linux-x86_64.cmake",
+                "OBSIDIAN_CPU_TARGET": "x86-64-v3",
+                "OBSIDIAN_FP_MODEL": "strict",
+                "OBSIDIAN_SANITIZER": "asan,ubsan",
+                "OBSIDIAN_ENABLE_CUDA": "OFF",
+                "OBSIDIAN_ENABLE_MPI": "OFF",
+                "OBSIDIAN_ENABLE_GRPC": "OFF",
+                "OBSIDIAN_ENABLE_RUST": "OFF",
+                "OBSIDIAN_ENABLE_TESTS": "ON"
+            }
+        },
+        {
+            "name": "ci-linux-tsan",
+            "displayName": "CI — Linux x86_64 Concurrency (ThreadSanitizer)",
+            "description": "DDIA concurrency & race condition verification for Disruptor, ThreadPool, and Lakehouse transactions",
+            "inherits": "base",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "RelWithDebInfo",
+                "CMAKE_TOOLCHAIN_FILE": "${sourceDir}/cmake/toolchains/linux-x86_64.cmake",
+                "OBSIDIAN_CPU_TARGET": "x86-64-v3",
+                "OBSIDIAN_FP_MODEL": "strict",
+                "OBSIDIAN_SANITIZER": "tsan",
+                "OBSIDIAN_ENABLE_CUDA": "OFF",
+                "OBSIDIAN_ENABLE_MPI": "OFF",
+                "OBSIDIAN_ENABLE_GRPC": "OFF",
+                "OBSIDIAN_ENABLE_RUST": "OFF",
+                "OBSIDIAN_ENABLE_TESTS": "ON"
+            }
         }
     ],
     "buildPresets": [
@@ -147,6 +183,16 @@
         {
             "name": "ci-linux-x64",
             "configurePreset": "ci-linux-x64",
+            "jobs": 0
+        },
+        {
+            "name": "ci-linux-sanitizers",
+            "configurePreset": "ci-linux-sanitizers",
+            "jobs": 0
+        },
+        {
+            "name": "ci-linux-tsan",
+            "configurePreset": "ci-linux-tsan",
             "jobs": 0
         },
         {
@@ -198,6 +244,56 @@
             "generators": [
                 "TGZ"
             ]
+        }
+    ],
+    "testPresets": [
+        {
+            "name": "ci-linux-x64",
+            "displayName": "Run Linux CI Tests",
+            "configurePreset": "ci-linux-x64",
+            "output": {
+                "outputOnFailure": true
+            },
+            "execution": {
+                "noTestsAction": "error",
+                "stopOnFailure": false
+            }
+        },
+        {
+            "name": "ci-windows-x64",
+            "displayName": "Run Windows CI Tests",
+            "configurePreset": "ci-windows-x64",
+            "output": {
+                "outputOnFailure": true
+            },
+            "execution": {
+                "noTestsAction": "error",
+                "stopOnFailure": false
+            }
+        },
+        {
+            "name": "ci-macos-universal",
+            "displayName": "Run macOS CI Tests",
+            "configurePreset": "ci-macos-universal",
+            "output": {
+                "outputOnFailure": true
+            },
+            "execution": {
+                "noTestsAction": "error",
+                "stopOnFailure": false
+            }
+        },
+        {
+            "name": "ci-linux-sanitizers",
+            "displayName": "Run DDIA Sanitizer Verification Tests",
+            "configurePreset": "ci-linux-sanitizers",
+            "output": {
+                "outputOnFailure": true
+            },
+            "execution": {
+                "noTestsAction": "error",
+                "stopOnFailure": false
+            }
         }
     ],
     "workflowPresets": [

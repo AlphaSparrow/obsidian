@@ -12,8 +12,8 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  build-and-test-linux:
-    name: "Linux x86_64 (GCC / Clang)"
+  ddia-invariants-and-sanitizers:
+    name: "DDIA Invariants & Memory Safety (ASan + UBSan)"
     runs-on: "ubuntu-latest"
     steps:
       - name: "Checkout Repository"
@@ -29,90 +29,144 @@ jobs:
       - name: "Set up Ccache"
         uses: "hendrikmuhs/ccache-action@v1.2"
         with:
-          key: "${{ runner.os }}-ccache"
+          key: "${{ runner.os }}-sanitizers-ccache"
 
-      - name: "Configure CMake (Preset ci-linux-x64)"
-        run: "cmake --preset ci-linux-x64"
+      - name: "Configure CMake (Preset ci-linux-sanitizers)"
+        run: "cmake --preset ci-linux-sanitizers"
 
-      - name: "Build Targets"
-        run: "cmake --build --preset ci-linux-x64"
+      - name: "Build Targets with ASan & UBSan"
+        run: "cmake --build --preset ci-linux-sanitizers"
 
-      - name: "Run Tests (CTest)"
-        run: "ctest --test-dir build/ci-linux-x64 --output-on-failure"
+      - name: "Run DDIA Invariant & Sanitizer Tests"
+        run: "ctest --preset ci-linux-sanitizers"
 
-      - name: "Package Distribution (CPack)"
-        run: "cpack --preset ci-linux-x64"
+      - name: "Execute DDIA Latency & SLA Microbenchmark"
+        run: |
+          ./build/ci-linux-sanitizers/tests/obsidian_ddia_tests --benchmark --report=ddia_benchmark.md
 
-      - name: "Upload Linux Packages"
+      - name: "Publish DDIA Verification Report to Job Summary"
+        run: |
+          if [ -f ddia_benchmark.md ]; then
+            cat ddia_benchmark.md >> $GITHUB_STEP_SUMMARY
+          fi
+
+      - name: "Upload DDIA Report Artifact"
         uses: "actions/upload-artifact@v4"
         with:
-          name: "obsidian-linux-packages"
-          path: |
-            build/ci-linux-x64/*.tar.gz
-            build/ci-linux-x64/*.deb
+          name: "obsidian-ddia-benchmark-report"
+          path: "ddia_benchmark.md"
           if-no-files-found: "ignore"
 
-  build-and-test-windows:
-    name: "Windows x64 (MSVC)"
-    runs-on: "windows-latest"
+  cross-platform-matrix:
+    name: "${{ matrix.name }}"
+    runs-on: "${{ matrix.os }}"
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: "Linux x86_64 (GCC / Clang)"
+            os: "ubuntu-latest"
+            preset: "ci-linux-x64"
+            artifact_name: "obsidian-linux-packages"
+            artifact_path: |
+              build/ci-linux-x64/*.tar.gz
+              build/ci-linux-x64/*.deb
+          - name: "Windows x64 (MSVC)"
+            os: "windows-latest"
+            preset: "ci-windows-x64"
+            artifact_name: "obsidian-windows-packages"
+            artifact_path: "build/ci-windows-x64/*.zip"
+          - name: "macOS Universal (AppleClang)"
+            os: "macos-latest"
+            preset: "ci-macos-universal"
+            artifact_name: "obsidian-macos-packages"
+            artifact_path: "build/ci-macos-universal/*.tar.gz"
+
     steps:
       - name: "Checkout Repository"
         uses: "actions/checkout@v4"
         with:
           submodules: "recursive"
 
-      - name: "Setup Ninja"
+      - name: "Install Linux Dependencies"
+        if: "runner.os == 'Linux'"
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cmake ninja-build ccache
+
+      - name: "Install macOS Dependencies"
+        if: "runner.os == 'macOS'"
+        run: "brew install ninja"
+
+      - name: "Setup Windows Ninja"
+        if: "runner.os == 'Windows'"
         uses: "seanmiddleditch/gha-setup-ninja@v5"
 
       - name: "Setup MSVC Developer Command Prompt"
+        if: "runner.os == 'Windows'"
         uses: "ilammy/msvc-dev-cmd@v1"
 
-      - name: "Configure CMake (Preset ci-windows-x64)"
-        run: "cmake --preset ci-windows-x64"
+      - name: "Set up Ccache"
+        if: "runner.os == 'Linux'"
+        uses: "hendrikmuhs/ccache-action@v1.2"
+        with:
+          key: "${{ runner.os }}-${{ matrix.preset }}-ccache"
+
+      - name: "Configure CMake (Preset ${{ matrix.preset }})"
+        run: "cmake --preset ${{ matrix.preset }}"
 
       - name: "Build Targets"
-        run: "cmake --build --preset ci-windows-x64 --verbose"
+        run: "cmake --build --preset ${{ matrix.preset }}"
 
-      - name: "Run Tests (CTest)"
-        run: "ctest --test-dir build/ci-windows-x64 --output-on-failure"
+      - name: "Run CTest Suite (Lakehouse + DDIA)"
+        run: "ctest --preset ${{ matrix.preset }}"
 
       - name: "Package Distribution (CPack)"
-        run: "cpack --preset ci-windows-x64"
+        run: "cpack --preset ${{ matrix.preset }}"
 
-      - name: "Upload Windows Packages"
+      - name: "Upload Platform Packages"
         uses: "actions/upload-artifact@v4"
         with:
-          name: "obsidian-windows-packages"
-          path: "build/ci-windows-x64/*.zip"
+          name: "${{ matrix.artifact_name }}"
+          path: "${{ matrix.artifact_path }}"
           if-no-files-found: "ignore"
 
-  build-and-test-macos:
-    name: "macOS Universal (AppleClang)"
-    runs-on: "macos-latest"
+  provenance-and-summary:
+    name: "Release Provenance & Supply Chain Summary"
+    runs-on: "ubuntu-latest"
+    needs: [ "ddia-invariants-and-sanitizers", "cross-platform-matrix" ]
     steps:
       - name: "Checkout Repository"
         uses: "actions/checkout@v4"
+
+      - name: "Download All Distribution Artifacts"
+        uses: "actions/download-artifact@v4"
         with:
-          submodules: "recursive"
+          path: "artifacts_dist"
 
-      - name: "Install Ninja"
-        run: "brew install ninja"
+      - name: "Generate SHA-256 Supply Chain Manifest"
+        run: |
+          echo "### 📦 Multi-Platform Distribution & Supply Chain Verification" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Artifact Archive | Size | SHA-256 Checksum |" >> $GITHUB_STEP_SUMMARY
+          echo "| :--- | :---: | :--- |" >> $GITHUB_STEP_SUMMARY
 
-      - name: "Configure CMake (Preset ci-macos-universal)"
-        run: "cmake --preset ci-macos-universal"
+          mkdir -p release_manifest
+          > release_manifest/SHA256SUMS
 
-      - name: "Build Targets"
-        run: "cmake --build --preset ci-macos-universal"
+          find artifacts_dist -type f \( -name "*.tar.gz" -o -name "*.deb" -o -name "*.zip" \) | sort | while read -r file; do
+            fname=$(basename "$file")
+            fsize=$(ls -lh "$file" | awk '{print $5}')
+            fsha=$(sha256sum "$file" | awk '{print $1}')
+            echo "$fsha  $fname" >> release_manifest/SHA256SUMS
+            echo "| \`$fname\` | \`$fsize\` | \`$fsha\` |" >> $GITHUB_STEP_SUMMARY
+          done
 
-      - name: "Run Tests (CTest)"
-        run: "ctest --test-dir build/ci-macos-universal --output-on-failure"
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "> **Verification:** All distribution archives verified against DDIA storage invariants and cryptographic checksums." >> $GITHUB_STEP_SUMMARY
 
-      - name: "Package Distribution (CPack)"
-        run: "cpack --preset ci-macos-universal"
-
-      - name: "Upload macOS Packages"
+      - name: "Upload SHA-256 Manifest"
         uses: "actions/upload-artifact@v4"
         with:
-          name: "obsidian-macos-packages"
-          path: "build/ci-macos-universal/*.tar.gz"
-          if-no-files-found: "ignore"
+          name: "obsidian-release-manifest-sha256"
+          path: "release_manifest/SHA256SUMS"

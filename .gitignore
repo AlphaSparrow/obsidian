@@ -1,12 +1,11 @@
 # Build & Output directories
-build/ci-*
-build/dev*
-build/perf*
-build/release*
+build/
 install/
 out/
 .cache/
 compile_commands.json
+ddia_report.md
+*.log
 
 # IDEs & OS
 .vscode/
