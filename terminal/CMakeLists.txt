@@ -46,6 +46,8 @@ target_link_libraries(obsidian
         obsidian::warnings
         obsidian::sanitizers
         obsidian::malloc
+        $<$<PLATFORM_ID:Windows>:gdiplus>
+        $<$<PLATFORM_ID:Windows>:dwmapi>
 )
 
 # Installation rules

@@ -71,7 +71,7 @@ jobs:
         run: "cmake --preset ci-windows-x64"
 
       - name: "Build Targets"
-        run: "cmake --build --preset ci-windows-x64"
+        run: "cmake --build --preset ci-windows-x64 --verbose"
 
       - name: "Run Tests (CTest)"
         run: "ctest --test-dir build/ci-windows-x64 --output-on-failure"

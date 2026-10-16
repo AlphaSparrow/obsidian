@@ -14,6 +14,10 @@
 #include <sched.h>
 #endif
 
+#if defined(_MSC_VER)
+#include <intrin.h>
+#endif
+
 #if defined(_MSC_VER) || defined(__x86_64__) || defined(_M_X64) || defined(__i386__) || defined(_M_IX86)
 #include <immintrin.h>
 #endif
@@ -26,7 +30,7 @@
 
 #if defined(_MSC_VER)
 #define OBSIDIAN_FORCE_INLINE __forceinline
-#define OBSIDIAN_COMPILER_BARRIER() _ReadWriteBarrier()
+#define OBSIDIAN_COMPILER_BARRIER() std::atomic_signal_fence(std::memory_order_seq_cst)
 #else
 #define OBSIDIAN_FORCE_INLINE inline __attribute__((always_inline))
 #define OBSIDIAN_COMPILER_BARRIER() asm volatile("" ::: "memory")

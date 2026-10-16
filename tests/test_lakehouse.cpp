@@ -63,6 +63,7 @@ void TestMarketDataSchemaAndColumnarBatch() {
     // Verify 64-byte alignment for SIMD
     uintptr_t ptr_val = reinterpret_cast<uintptr_t>(price_col->raw_data());
     assert(ptr_val % 64 == 0);
+    (void)ptr_val;
     assert(price_col->size() == 4);
     assert((*price_col)[1] == 101.0);
 

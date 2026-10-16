@@ -46,7 +46,7 @@ void ThreadPool::submit_internal(Task task) {
     }
 
     if (tl_worker_id >= 0 && static_cast<size_t>(tl_worker_id) < thread_count_) {
-        if (local_queues_[tl_worker_id]->push_bottom(std::move(task))) {
+        if (local_queues_[static_cast<size_t>(tl_worker_id)]->push_bottom(std::move(task))) {
 #if defined(_WIN32)
             if (idle_workers_.load(std::memory_order_relaxed) > 0) {
                 SetEvent(wake_event_);
