@@ -1,7 +1,7 @@
 #include <windows.h>
 
 // Embed application manifest
-1 RT_MANIFEST "@CMAKE_CURRENT_SOURCE_DIR@/desktop/resources/obsidian.manifest"
+@OBSIDIAN_RC_MANIFEST_DIRECTIVE@
 
 // Version information for Windows Explorer and Task Manager
 VS_VERSION_INFO VERSIONINFO

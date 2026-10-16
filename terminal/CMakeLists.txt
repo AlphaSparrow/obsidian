@@ -15,6 +15,14 @@ set(_terminal_sources
 # Windows resources
 if(WIN32)
     set(_rc_file "${CMAKE_CURRENT_BINARY_DIR}/obsidian.rc")
+    if(MSVC)
+        # On MSVC, CMake vs_link_exe automatically invokes mt.exe to merge .manifest
+        # source files into manifest.res. Embedding it in .rc causes CVT1100 duplicate resource.
+        set(OBSIDIAN_RC_MANIFEST_DIRECTIVE "// Manifest merged and embedded by CMake via mt.exe")
+        list(APPEND _terminal_sources "${CMAKE_CURRENT_SOURCE_DIR}/desktop/resources/obsidian.manifest")
+    else()
+        set(OBSIDIAN_RC_MANIFEST_DIRECTIVE "1 RT_MANIFEST \"${CMAKE_CURRENT_SOURCE_DIR}/desktop/resources/obsidian.manifest\"")
+    endif()
     configure_file(
         "${CMAKE_CURRENT_SOURCE_DIR}/desktop/resources/obsidian.rc.in"
         "${_rc_file}"
