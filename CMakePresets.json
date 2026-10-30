@@ -294,6 +294,18 @@
                 "noTestsAction": "error",
                 "stopOnFailure": false
             }
+        },
+        {
+            "name": "ci-linux-tsan",
+            "displayName": "Run DDIA Concurrency & ThreadSanitizer Tests",
+            "configurePreset": "ci-linux-tsan",
+            "output": {
+                "outputOnFailure": true
+            },
+            "execution": {
+                "noTestsAction": "error",
+                "stopOnFailure": false
+            }
         }
     ],
     "workflowPresets": [
