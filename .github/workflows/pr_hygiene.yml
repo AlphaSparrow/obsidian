@@ -1,0 +1,38 @@
+name: "Obsidian PR Hygiene & Quality Gate"
+
+on:
+  pull_request:
+    types: [ opened, synchronize, reopened, edited ]
+    branches: [ "main", "master" ]
+
+concurrency:
+  group: "pr-hygiene-${{ github.event.pull_request.number || github.ref }}"
+  cancel-in-progress: true
+
+jobs:
+  pr-compliance:
+    name: "PR Title & Conventional Commits Linter"
+    runs-on: "ubuntu-latest"
+    steps:
+      - name: "Checkout Repository"
+        uses: "actions/checkout@v4"
+        with:
+          fetch-depth: 0
+
+      - name: "Set up Python Environment"
+        uses: "actions/setup-python@v5"
+        with:
+          python-version: "3.11"
+
+      - name: "Validate PR Title"
+        run: |
+          pr_title="${{ github.event.pull_request.title }}"
+          echo "Inspecting Pull Request title: '$pr_title'"
+          if ! echo "$pr_title" | grep -Eq '^(feat|fix|docs|style|refactor|perf|test|build|ci|chore|revert)(\([a-zA-Z0-9_\-\.\/]+\))?(!)?: .{1,100}'; then
+            echo "::error::PR title '$pr_title' does not adhere to Conventional Commits format! Expected: 'type(scope): summary'"
+            exit 1
+          fi
+
+      - name: "Validate Pull Request Commits and File Hygiene"
+        run: |
+          python3 tools/ci/pr_hygiene_check.py --base-ref "origin/${{ github.base_ref }}" --root .
