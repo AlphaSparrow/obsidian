@@ -237,6 +237,34 @@ jobs:
           name: "obsidian-sbom-manifests"
           path: "sbom_dist"
 
+  docs-and-architecture-validation:
+    name: "Documentation & Architecture Cross-Reference Validation"
+    runs-on: "ubuntu-latest"
+    steps:
+      - name: "Checkout Repository"
+        uses: "actions/checkout@v4"
+
+      - name: "Install Doxygen and Graphviz"
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y doxygen graphviz python3
+
+      - name: "Generate Doxygen API Documentation"
+        run: |
+          mkdir -p build/docs
+          doxygen Doxyfile
+
+      - name: "Validate Architecture Links & Technical Specs"
+        run: |
+          python3 tools/ci/validate_docs.py --docs docs --root .
+
+      - name: "Upload Doxygen HTML Artifact"
+        uses: "actions/upload-artifact@v4"
+        with:
+          name: "obsidian-doxygen-api-docs"
+          path: "build/docs/html"
+          if-no-files-found: "ignore"
+
   cross-platform-matrix:
     name: "${{ matrix.name }}"
     runs-on: "${{ matrix.os }}"
@@ -314,7 +342,7 @@ jobs:
   provenance-and-summary:
     name: "Release Provenance & Supply Chain Summary"
     runs-on: "ubuntu-latest"
-    needs: [ "ddia-invariants-and-sanitizers", "concurrency-and-tsan", "static-analysis-and-linting", "code-coverage", "security-and-sbom", "cross-platform-matrix" ]
+    needs: [ "ddia-invariants-and-sanitizers", "concurrency-and-tsan", "static-analysis-and-linting", "code-coverage", "security-and-sbom", "docs-and-architecture-validation", "cross-platform-matrix" ]
     steps:
       - name: "Checkout Repository"
         uses: "actions/checkout@v4"
