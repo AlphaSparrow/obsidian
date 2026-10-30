@@ -178,6 +178,21 @@
                 "OBSIDIAN_SANITIZER": "none",
                 "OBSIDIAN_ENABLE_TESTS": "ON"
             }
+        },
+        {
+            "name": "ci-coverage",
+            "displayName": "CI — Code Coverage (LCOV / gcov)",
+            "description": "Code coverage pipeline measuring test suite branch and statement execution depth",
+            "inherits": "base",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "Debug",
+                "CMAKE_TOOLCHAIN_FILE": "${sourceDir}/cmake/toolchains/linux-x86_64.cmake",
+                "OBSIDIAN_CPU_TARGET": "generic",
+                "OBSIDIAN_FP_MODEL": "strict",
+                "OBSIDIAN_ENABLE_COVERAGE": "ON",
+                "OBSIDIAN_SANITIZER": "none",
+                "OBSIDIAN_ENABLE_TESTS": "ON"
+            }
         }
     ],
     "buildPresets": [
@@ -214,6 +229,11 @@
         {
             "name": "ci-static-analysis",
             "configurePreset": "ci-static-analysis",
+            "jobs": 0
+        },
+        {
+            "name": "ci-coverage",
+            "configurePreset": "ci-coverage",
             "jobs": 0
         },
         {
@@ -320,6 +340,18 @@
             "name": "ci-linux-tsan",
             "displayName": "Run DDIA Concurrency & ThreadSanitizer Tests",
             "configurePreset": "ci-linux-tsan",
+            "output": {
+                "outputOnFailure": true
+            },
+            "execution": {
+                "noTestsAction": "error",
+                "stopOnFailure": false
+            }
+        },
+        {
+            "name": "ci-coverage",
+            "displayName": "Run Tests with Coverage Instrumentation",
+            "configurePreset": "ci-coverage",
             "output": {
                 "outputOnFailure": true
             },

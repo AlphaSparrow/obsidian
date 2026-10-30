@@ -168,3 +168,23 @@ if(OBSIDIAN_ENABLE_VEC_REPORT)
         target_compile_options(obsidian_tuning INTERFACE /Qvec-report:2)
     endif()
 endif()
+
+# Code coverage instrumentation
+option(OBSIDIAN_ENABLE_COVERAGE "Enable code coverage instrumentation (gcov/lcov/llvm-cov)" OFF)
+
+if(OBSIDIAN_ENABLE_COVERAGE)
+    if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+        target_compile_options(obsidian_tuning INTERFACE
+            -O0
+            -g
+            --coverage
+            -fprofile-arcs
+            -ftest-coverage
+        )
+        target_link_options(obsidian_tuning INTERFACE --coverage)
+        message(STATUS "[obsidian/tuning] Code coverage enabled (--coverage)")
+    elseif(MSVC)
+        message(WARNING "[obsidian/tuning] Coverage not supported on MSVC compiler")
+    endif()
+endif()
+
