@@ -1,0 +1,15 @@
+.git
+.github
+build/
+install/
+*.exe
+*.zip
+*.tar.gz
+*.deb
+coverage_html/
+.cache/
+.idea/
+*.swp
+*.tmp
+*.o
+*.a
