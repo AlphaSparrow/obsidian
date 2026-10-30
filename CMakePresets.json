@@ -162,6 +162,22 @@
                 "OBSIDIAN_ENABLE_RUST": "OFF",
                 "OBSIDIAN_ENABLE_TESTS": "ON"
             }
+        },
+        {
+            "name": "ci-static-analysis",
+            "displayName": "CI — Static Analysis & Linting (Clang-Tidy + Cppcheck)",
+            "description": "Static code analysis quality gate verifying C++20 core guidelines and concurrency patterns",
+            "inherits": "base",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "Debug",
+                "CMAKE_TOOLCHAIN_FILE": "${sourceDir}/cmake/toolchains/linux-x86_64.cmake",
+                "OBSIDIAN_CPU_TARGET": "x86-64-v3",
+                "OBSIDIAN_FP_MODEL": "strict",
+                "OBSIDIAN_ENABLE_CLANG_TIDY": "ON",
+                "OBSIDIAN_ENABLE_CPPCHECK": "ON",
+                "OBSIDIAN_SANITIZER": "none",
+                "OBSIDIAN_ENABLE_TESTS": "ON"
+            }
         }
     ],
     "buildPresets": [
@@ -193,6 +209,11 @@
         {
             "name": "ci-linux-tsan",
             "configurePreset": "ci-linux-tsan",
+            "jobs": 0
+        },
+        {
+            "name": "ci-static-analysis",
+            "configurePreset": "ci-static-analysis",
             "jobs": 0
         },
         {
