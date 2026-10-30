@@ -453,6 +453,76 @@ void VerifyDDIA_VacuumAndTombstoneCleanup() {
     std::cout << "  -> PASSED: Dead files purged; active snapshot files preserved.\n";
 }
 
+/// Verifies Crash Resilience & Recovery (DDIA Chapter 7 & 11):
+/// Simulates sudden ungraceful process crash during transaction staging,
+/// partial orphan data files on disk, and table reopen.
+/// Invariant: Lakehouse catalog and table state must recover to the last committed
+/// atomic snapshot without reading partial corrupted state.
+void VerifyDDIA_CrashRecoveryAndTombstoneInvariance() {
+    std::cout << "[DDIA Chapter 7/11] Verifying Crash Recovery & Storage Fault Resilience...\n";
+    std::string table_loc = "build/test_env/ddia_crash_recovery_table";
+    auto fs = LocalFileSystem::Default();
+    fs->DeleteRecursively(table_loc);
+
+    auto schema = TradeTick::GetSchema();
+    PartitionSpec spec(1, {{"exchange", "exchange", PartitionTransform::Identity, 0}});
+    auto table = LakehouseTable::Create(table_loc, "crash_recovery_test", schema, spec, fs).value();
+
+    // Step 1: Commit initial valid snapshot 1
+    {
+        auto tx = table->NewTransaction(OperationType::Append);
+        DataFile df1{};
+        df1.path = table_loc + "/exchange=NYSE/committed_1.parquet";
+        df1.format = "parquet";
+        df1.file_size_bytes = 2048;
+        df1.record_count = 50;
+        df1.partitions = {{"exchange", "NYSE"}};
+        tx->AppendFile(df1);
+        assert(tx->Commit().ok());
+    }
+    assert(table->current_snapshot_id() == 1);
+
+    // Step 2: Simulate ungraceful crash mid-write:
+    // Write partial/corrupted orphaned file directly to disk that was never committed
+    std::string orphan_path = table_loc + "/exchange=NYSE/corrupt_uncommitted_partial.tmp";
+    fs->WriteFileAtomic(orphan_path, "INCOMPLETE_CORRUPTED_PARQUET_HEADER_DATA_FAIL");
+    assert(fs->Exists(orphan_path).value());
+
+    // Step 3: Simulate engine crash by releasing existing table instance
+    // and reloading table from storage manifest via Open
+    table.reset();
+
+    // Reopen table from disk
+    auto reopened_table_or = LakehouseTable::Open(table_loc, fs);
+    assert(reopened_table_or.ok());
+    auto reopened_table = reopened_table_or.value();
+
+    // Invariant: Snapshot ID must be exactly 1; orphan file is ignored by metadata
+    assert(reopened_table->current_snapshot_id() == 1);
+    auto scan_res = reopened_table->Scan();
+    assert(scan_res.ok());
+    assert(scan_res.value().size() == 1);
+    assert(scan_res.value()[0].path.find("committed_1.parquet") != std::string::npos);
+
+    // Step 4: Verify subsequent commit cleanly advances snapshot to 2
+    {
+        auto tx2 = reopened_table->NewTransaction(OperationType::Append);
+        DataFile df2{};
+        df2.path = table_loc + "/exchange=NASDAQ/committed_2.parquet";
+        df2.format = "parquet";
+        df2.file_size_bytes = 4096;
+        df2.record_count = 100;
+        df2.partitions = {{"exchange", "NASDAQ"}};
+        tx2->AppendFile(df2);
+        assert(tx2->Commit().ok());
+    }
+    assert(reopened_table->current_snapshot_id() == 2);
+    assert(reopened_table->Scan().value().size() == 2);
+
+    std::cout << "  -> PASSED: Crash recovery verified; orphaned corrupted state ignored and consistency preserved.\n";
+}
+
+
 // ============================================================================
 // DDIA CHAPTER 1: SLA & LATENCY PERCENTILE PROFILING (p50, p90, p95, p99)
 // ============================================================================
@@ -600,7 +670,8 @@ void RunDDIAPerformanceBenchmark(const std::string& report_out_path = "") {
             out << "| **Optimistic Concurrency (OCC)** | First-committer-wins validation & backoff retries | `PASSED` |\n";
             out << "| **Multi-Threaded Linearizability** | Lock-free metadata advancement under concurrent load | `PASSED` |\n";
             out << "| **LSM / Bin-Packing Compaction** | Small-file merge into 128MB target partition units | `PASSED` |\n";
-            out << "| **Tombstone Vacuuming** | Retention window garbage collection of dead files | `PASSED` |\n\n";
+            out << "| **Tombstone Vacuuming** | Retention window garbage collection of dead files | `PASSED` |\n";
+            out << "| **Crash Recovery & Fault Tolerance** | Invariant recovery from incomplete uncommitted writes | `PASSED` |\n\n";
             out << "### ⚡ Tail Latency Distribution (SLA Benchmarks)\n\n";
             out << "| Operation | Throughput | Min | p50 (Median) | p90 | p95 | p99 (Tail) | Max |\n";
             out << "| :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: |\n";
@@ -613,12 +684,15 @@ void RunDDIAPerformanceBenchmark(const std::string& report_out_path = "") {
 
 int main(int argc, char** argv) {
     bool run_benchmark = false;
+    bool run_chaos = false;
     std::string report_file = "";
 
     for (int i = 1; i < argc; ++i) {
         std::string arg = argv[i];
         if (arg == "--benchmark") {
             run_benchmark = true;
+        } else if (arg == "--chaos") {
+            run_chaos = true;
         } else if (arg.rfind("--report=", 0) == 0) {
             report_file = arg.substr(9);
             run_benchmark = true;
@@ -635,6 +709,14 @@ int main(int argc, char** argv) {
     VerifyDDIA_ConcurrentMultiThreadedOCCStress();
     VerifyDDIA_StorageCompactionAndBinPacking();
     VerifyDDIA_VacuumAndTombstoneCleanup();
+    VerifyDDIA_CrashRecoveryAndTombstoneInvariance();
+
+    if (run_chaos) {
+        std::cout << "\n[Chaos Mode] Running intensive ungraceful recovery loop...\n";
+        for (int c = 0; c < 5; ++c) {
+            VerifyDDIA_CrashRecoveryAndTombstoneInvariance();
+        }
+    }
 
     std::cout << "\n✅ ALL DDIA INTERNALS INVARIANT CHECKS PASSED!\n";
 

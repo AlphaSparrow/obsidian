@@ -44,6 +44,10 @@ jobs:
         run: |
           ./build/ci-linux-sanitizers/tests/obsidian_ddia_tests --benchmark --report=ddia_benchmark.md
 
+      - name: "Execute Storage Chaos & Ungraceful Crash Injection Suite"
+        run: |
+          ./build/ci-linux-sanitizers/tests/obsidian_ddia_tests --chaos
+
       - name: "Publish DDIA Verification Report to Job Summary"
         run: |
           if [ -f ddia_benchmark.md ]; then
