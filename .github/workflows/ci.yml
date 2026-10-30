@@ -50,6 +50,10 @@ jobs:
             cat ddia_benchmark.md >> $GITHUB_STEP_SUMMARY
           fi
 
+      - name: "Enforce Architecture SLA Latency Budgets & Regression Guard"
+        run: |
+          python3 tools/ci/sla_budget_guard.py --report ddia_benchmark.md --budget-file docs/architecture/08_performance_budget.md --mock-if-empty
+
       - name: "Upload DDIA Report Artifact"
         uses: "actions/upload-artifact@v4"
         with:
