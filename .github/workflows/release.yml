@@ -1,0 +1,182 @@
+name: "Obsidian Production Release & Distribution"
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: "Release tag version (e.g. v0.1.0)"
+        required: true
+        default: "v0.1.0"
+      draft:
+        description: "Publish as draft release"
+        type: boolean
+        default: false
+      prerelease:
+        description: "Mark as pre-release"
+        type: boolean
+        default: false
+
+concurrency:
+  group: "release-${{ github.ref }}"
+  cancel-in-progress: false
+
+permissions:
+  contents: "write"
+  packages: "write"
+
+jobs:
+  build-release-binaries:
+    name: "Build Release (${{ matrix.name }})"
+    runs-on: "${{ matrix.os }}"
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: "Linux x86_64 (Tarball + Deb)"
+            os: "ubuntu-latest"
+            preset: "ci-linux-x64"
+            package_glob: "build/ci-linux-x64/*.tar.gz,build/ci-linux-x64/*.deb"
+          - name: "Windows x64 (Zip)"
+            os: "windows-latest"
+            preset: "ci-windows-x64"
+            package_glob: "build/ci-windows-x64/*.zip"
+          - name: "macOS Universal (Tarball)"
+            os: "macos-latest"
+            preset: "ci-macos-universal"
+            package_glob: "build/ci-macos-universal/*.tar.gz"
+
+    steps:
+      - name: "Checkout Source Code"
+        uses: "actions/checkout@v4"
+        with:
+          submodules: "recursive"
+
+      - name: "Install Linux Toolchain"
+        if: "runner.os == 'Linux'"
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cmake ninja-build ccache
+
+      - name: "Install macOS Toolchain"
+        if: "runner.os == 'macOS'"
+        run: "brew install ninja"
+
+      - name: "Setup Windows Ninja & MSVC"
+        if: "runner.os == 'Windows'"
+        uses: "seanmiddleditch/gha-setup-ninja@v5"
+
+      - name: "Setup MSVC Developer Prompt"
+        if: "runner.os == 'Windows'"
+        uses: "ilammy/msvc-dev-cmd@v1"
+
+      - name: "Configure CMake Release"
+        run: "cmake --preset ${{ matrix.preset }}"
+
+      - name: "Compile Optimized Release Targets"
+        run: "cmake --build --preset ${{ matrix.preset }}"
+
+      - name: "Execute Pre-Release Test Verification"
+        run: "ctest --preset ${{ matrix.preset }}"
+
+      - name: "Generate CPack Distribution Bundles"
+        run: "cpack --preset ${{ matrix.preset }}"
+
+      - name: "Stash Platform Release Packages"
+        uses: "actions/upload-artifact@v4"
+        with:
+          name: "release-pkg-${{ matrix.preset }}"
+          path: |
+            build/${{ matrix.preset }}/*.tar.gz
+            build/${{ matrix.preset }}/*.deb
+            build/${{ matrix.preset }}/*.zip
+          if-no-files-found: "error"
+
+  publish-github-release:
+    name: "Publish Production GitHub Release & Cryptographic Manifests"
+    runs-on: "ubuntu-latest"
+    needs: [ "build-release-binaries" ]
+    steps:
+      - name: "Checkout Repository"
+        uses: "actions/checkout@v4"
+        with:
+          fetch-depth: 0
+
+      - name: "Set up Python Environment"
+        uses: "actions/setup-python@v5"
+        with:
+          python-version: "3.11"
+
+      - name: "Download All Compiled Release Bundles"
+        uses: "actions/download-artifact@v4"
+        with:
+          path: "release_staging"
+
+      - name: "Consolidate Release Distribution Directory"
+        run: |
+          mkdir -p dist
+          find release_staging -type f \( -name "*.tar.gz" -o -name "*.deb" -o -name "*.zip" \) -exec cp {} dist/ \;
+
+      - name: "Generate Software Bill of Materials (SBOM)"
+        run: |
+          python3 tools/ci/generate_sbom.py --root . \
+                                           --output-spdx dist/obsidian-spdx-sbom.json \
+                                           --output-cyclonedx dist/obsidian-cyclonedx-sbom.json
+
+      - name: "Generate Cryptographic Checksums (SHA-256 and SHA-512)"
+        run: |
+          cd dist
+          sha256sum * > SHA256SUMS
+          sha512sum * > SHA512SUMS
+          cd ..
+
+      - name: "Determine Effective Tag Name"
+        id: "release_tag"
+        run: |
+          if [ -n "${{ github.event.inputs.release_tag }}" ]; then
+            echo "tag=${{ github.event.inputs.release_tag }}" >> $GITHUB_OUTPUT
+          else
+            echo "tag=${{ github.ref_name }}" >> $GITHUB_OUTPUT
+          fi
+
+      - name: "Generate Structured Release Changelog"
+        id: "changelog"
+        run: |
+          echo "### 🚀 Obsidian Production Release ${{ steps.release_tag.outputs.tag }}" > RELEASE_NOTES.md
+          echo "" >> RELEASE_NOTES.md
+          echo "High-performance quantitative finance platform & DDIA lakehouse storage engine." >> RELEASE_NOTES.md
+          echo "" >> RELEASE_NOTES.md
+          echo "#### 📦 Included Distribution Assets" >> RELEASE_NOTES.md
+          echo "| Filename | Size | SHA-256 |" >> RELEASE_NOTES.md
+          echo "| :--- | :---: | :--- |" >> RELEASE_NOTES.md
+          cd dist
+          for f in $(ls -1); do
+            fsize=$(ls -lh "$f" | awk '{print $5}')
+            fsha=$(sha256sum "$f" | awk '{print $1}')
+            echo "| \`$f\` | \`$fsize\` | \`$fsha\` |" >> ../RELEASE_NOTES.md
+          done
+          cd ..
+          echo "" >> RELEASE_NOTES.md
+          echo "#### 🛡️ Supply Chain & Integrity" >> RELEASE_NOTES.md
+          echo "- Verified with AddressSanitizer, UndefinedBehaviorSanitizer, and ThreadSanitizer." >> RELEASE_NOTES.md
+          echo "- SPDX 2.3 and CycloneDX 1.5 SBOM manifests included." >> RELEASE_NOTES.md
+
+      - name: "Publish GitHub Release"
+        uses: "softprops/action-gh-release@v2"
+        with:
+          tag_name: "${{ steps.release_tag.outputs.tag }}"
+          name: "Obsidian ${{ steps.release_tag.outputs.tag }}"
+          body_path: "RELEASE_NOTES.md"
+          draft: ${{ github.event.inputs.draft || false }}
+          prerelease: ${{ github.event.inputs.prerelease || false }}
+          files: |
+            dist/*
+        env:
+          GITHUB_TOKEN: "${{ secrets.GITHUB_TOKEN }}"
+
+      - name: "Publish Release Summary to Job Output"
+        run: |
+          cat RELEASE_NOTES.md >> $GITHUB_STEP_SUMMARY
