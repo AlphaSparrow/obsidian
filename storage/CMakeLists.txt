@@ -9,6 +9,8 @@ add_library(obsidian_storage STATIC
     schema/market_data_schema.hpp
     schema/schema_validator.hpp
     schema/schema_validator.cpp
+    codecs/gorilla.hpp
+    codecs/gorilla.cpp
     arrow/columnar_batch.hpp
     parquet/parquet_structures.hpp
     parquet/columnar_file_writer.hpp
