@@ -5,6 +5,7 @@
 #include "storage/arrow/columnar_batch.hpp"
 #include "storage/parquet/columnar_file_writer.hpp"
 #include "storage/parquet/columnar_file_reader.hpp"
+#include "storage/duckdb/duckdb_bridge.hpp"
 #include "storage/lakehouse/partition_spec.hpp"
 #include "storage/lakehouse/manifest_manager.hpp"
 #include "storage/lakehouse/lakehouse_table.hpp"
@@ -587,6 +588,75 @@ void TestLakehouseIntegrityGuardAndOrphanDetection() {
     std::cout << "  -> PASSED\n";
 }
 
+void TestDuckDBArrowBridgeAndAnalyticalEngine() {
+    std::cout << "[TEST] Running TestDuckDBArrowBridgeAndAnalyticalEngine...\n";
+    auto schema = QuoteL1::GetSchema();
+
+    // 1. Arrow C Data Interface Schema Export
+    obsidian::storage::duckdb_engine::ArrowSchema arrow_schema{};
+    auto export_schema_st = obsidian::storage::duckdb_engine::DuckDBArrowBridge::ExportSchema(schema, &arrow_schema);
+    assert(export_schema_st.ok());
+    assert(std::string(arrow_schema.format) == "+s");
+    assert(arrow_schema.n_children == 7);
+    assert(std::string(arrow_schema.children[0]->name) == "timestamp_ns");
+    assert(std::string(arrow_schema.children[2]->name) == "bid_price");
+    assert(std::string(arrow_schema.children[2]->format) == "g"); // Double
+
+    // 2. Prepare Batch and Export ArrowArray (Zero-Copy)
+    size_t count = 4;
+    std::vector<int64_t> ts = {1000, 2000, 3000, 4000};
+    std::vector<int32_t> sym = {1, 1, 1, 1};
+    std::vector<double> bid_px = {100.5, 105.0, 98.0, 110.5};
+    std::vector<double> bid_sz = {10.0, 20.0, 15.0, 30.0};
+    std::vector<double> ask_px = {101.0, 105.5, 98.5, 111.0};
+    std::vector<double> ask_sz = {12.0, 18.0, 21.0, 19.0};
+    std::vector<int64_t> seq = {1, 2, 3, 4};
+
+    std::vector<std::shared_ptr<IColumnVector>> cols;
+    cols.push_back(std::make_shared<ColumnVector<int64_t>>(DataType::TimestampNs, ts.data(), count));
+    cols.push_back(std::make_shared<ColumnVector<int32_t>>(DataType::Int32, sym.data(), count));
+    cols.push_back(std::make_shared<ColumnVector<double>>(DataType::Double, bid_px.data(), count));
+    cols.push_back(std::make_shared<ColumnVector<double>>(DataType::Double, bid_sz.data(), count));
+    cols.push_back(std::make_shared<ColumnVector<double>>(DataType::Double, ask_px.data(), count));
+    cols.push_back(std::make_shared<ColumnVector<double>>(DataType::Double, ask_sz.data(), count));
+    cols.push_back(std::make_shared<ColumnVector<int64_t>>(DataType::Int64, seq.data(), count));
+
+    auto batch = std::make_shared<ColumnarBatch>(schema, cols, count);
+
+    obsidian::storage::duckdb_engine::ArrowArray arrow_array{};
+    auto export_array_st = obsidian::storage::duckdb_engine::DuckDBArrowBridge::ExportBatch(*batch, &arrow_array);
+    assert(export_array_st.ok());
+    assert(arrow_array.length == 4);
+    assert(arrow_array.n_children == 7);
+
+    // Verify zero-copy pointer equivalence
+    assert(arrow_array.children[2]->buffers[1] == cols[2]->raw_data());
+
+    // 3. Analytical Query Engine Filter
+    obsidian::storage::duckdb_engine::DuckDBAnalyticalEngine engine;
+    auto filter_or = engine.ExecuteFilter(batch, "bid_price", [](double px) {
+        return px >= 100.0;
+    });
+    assert(filter_or.ok());
+    auto res = filter_or.value();
+    assert(res.rows_scanned == 4);
+    assert(res.rows_matched == 3); // 100.5, 105.0, 110.5
+    assert(res.result_batch->num_rows() == 3);
+
+    auto filtered_px = res.result_batch->GetTypedColumn<double>(2);
+    assert((*filtered_px)[0] == 100.5);
+    assert((*filtered_px)[1] == 105.0);
+    assert((*filtered_px)[2] == 110.5);
+
+    // 4. Clean Release
+    obsidian::storage::duckdb_engine::DuckDBArrowBridge::ReleaseSchema(&arrow_schema);
+    obsidian::storage::duckdb_engine::DuckDBArrowBridge::ReleaseArray(&arrow_array);
+    assert(arrow_schema.release == nullptr);
+    assert(arrow_array.release == nullptr);
+
+    std::cout << "  -> PASSED\n";
+}
+
 int main() {
     std::cout << "=====================================================\n";
     std::cout << "   Obsidian Lakehouse & Backend Verification Suite   \n";
@@ -602,6 +672,7 @@ int main() {
         TestColumnarFileWriterAndReader();
         TestSchemaValidatorAndDriftDetection();
         TestLakehouseIntegrityGuardAndOrphanDetection();
+        TestDuckDBArrowBridgeAndAnalyticalEngine();
 
         std::cout << "\n>>> ALL OBSIDIAN LAKEHOUSE TESTS PASSED! <<<\n";
         return 0;

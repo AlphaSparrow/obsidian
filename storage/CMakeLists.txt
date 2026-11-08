@@ -15,6 +15,8 @@ add_library(obsidian_storage STATIC
     parquet/columnar_file_writer.cpp
     parquet/columnar_file_reader.hpp
     parquet/columnar_file_reader.cpp
+    duckdb/duckdb_bridge.hpp
+    duckdb/duckdb_bridge.cpp
     lakehouse/lakehouse_structures.hpp
     lakehouse/partition_spec.hpp
     lakehouse/manifest_manager.hpp
