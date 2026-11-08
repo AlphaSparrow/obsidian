@@ -94,7 +94,7 @@ jobs:
         run: "cpack --preset ${{ matrix.preset }}"
 
       - name: "Stash Platform Release Packages"
-        uses: "actions/upload-artifact@v4"
+        uses: "actions/upload-artifact@v7"
         with:
           name: "release-pkg-${{ matrix.preset }}"
           path: |
