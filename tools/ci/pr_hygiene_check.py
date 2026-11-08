@@ -21,7 +21,7 @@ if sys.stdout.encoding != 'utf-8':
         pass
 
 CONVENTIONAL_COMMIT_REGEX = re.compile(
-    r"^(feat|fix|docs|style|refactor|perf|test|build|ci|chore|revert)(\([a-zA-Z0-9_\-\.\/]+\))?(!)?: .{1,100}"
+    r"^(feat|fix|docs|style|refactor|perf|test|build|ci|chore|revert|Revert)(\([a-zA-Z0-9_\-\.\/]+\))?(!)?: .{1,100}"
 )
 
 FORBIDDEN_FILE_PATTERNS = [
@@ -32,12 +32,18 @@ FORBIDDEN_FILE_PATTERNS = [
     re.compile(r".*id_rsa.*"),
 ]
 
+ALLOWED_EXEMPLAR_FILES = {
+    ".env.example",
+    ".env.template",
+    ".env.sample",
+}
+
 MAX_FILE_SIZE_BYTES = 5 * 1024 * 1024  # 5 MB threshold for tracked files
 
 def check_commit_messages(base_ref: str, head_ref: str = "HEAD") -> List[str]:
     violations = []
     try:
-        cmd = ["git", "log", f"{base_ref}..{head_ref}", "--format=%s"]
+        cmd = ["git", "log", "--no-merges", f"{base_ref}..{head_ref}", "--format=%s"]
         output = subprocess.check_output(cmd, text=True, stderr=subprocess.DEVNULL)
         commits = [c.strip() for c in output.splitlines() if c.strip()]
     except Exception:
@@ -49,6 +55,8 @@ def check_commit_messages(base_ref: str, head_ref: str = "HEAD") -> List[str]:
             commits = []
 
     for c in commits:
+        if c.startswith("Merge ") or c.startswith("Merge branch ") or c.startswith("Merge pull request "):
+            continue
         if not CONVENTIONAL_COMMIT_REGEX.match(c):
             violations.append(f"Invalid Conventional Commit message: '{c}'")
 
@@ -72,10 +80,11 @@ def check_file_hygiene(base_ref: str = "origin/main", head_ref: str = "HEAD", ro
     for rel_p in changed_files:
         rel_clean = rel_p.replace("\\", "/")
         file_name = os.path.basename(rel_clean)
-        # Check forbidden patterns
-        for pat in FORBIDDEN_FILE_PATTERNS:
-            if pat.match(file_name):
-                violations.append(f"Forbidden secret / sensitive file detected: '{rel_clean}'")
+        # Check forbidden patterns unless explicitly exempted
+        if file_name not in ALLOWED_EXEMPLAR_FILES:
+            for pat in FORBIDDEN_FILE_PATTERNS:
+                if pat.match(file_name):
+                    violations.append(f"Forbidden secret / sensitive file detected: '{rel_clean}'")
         # Check oversized files
         full_p = os.path.join(root_dir, rel_clean)
         if os.path.exists(full_p):
