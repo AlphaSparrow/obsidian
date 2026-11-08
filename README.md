@@ -70,6 +70,12 @@ Obsidian employs an industrial-grade, multi-stage continuous integration and dis
 
 ---
 
+## 🤝 Contributing
+
+We welcome contributions from the community! Please see our [**Contributing Guide**](CONTRIBUTING.md) for details on code style, Conventional Commits, DDIA invariants, and pull request procedures.
+
+---
+
 ## 📜 License
 
 Distributed under the [Apache License 2.0](LICENSE).
