@@ -6,6 +6,7 @@
 #include "storage/parquet/columnar_file_writer.hpp"
 #include "storage/parquet/columnar_file_reader.hpp"
 #include "storage/duckdb/duckdb_bridge.hpp"
+#include "storage/clickhouse/clickhouse_exporter.hpp"
 #include "storage/lakehouse/partition_spec.hpp"
 #include "storage/lakehouse/manifest_manager.hpp"
 #include "storage/lakehouse/lakehouse_table.hpp"
@@ -657,6 +658,52 @@ void TestDuckDBArrowBridgeAndAnalyticalEngine() {
     std::cout << "  -> PASSED\n";
 }
 
+void TestClickHouseExporterAndRowBinaryEncoding() {
+    std::cout << "[TEST] Running TestClickHouseExporterAndRowBinaryEncoding...\n";
+    auto schema = QuoteL1::GetSchema();
+
+    // 1. Generate MergeTree DDL
+    std::string ddl = obsidian::storage::clickhouse::ClickHouseExporter::GenerateMergeTreeDDL("quotes_l1", schema);
+    assert(ddl.find("CREATE TABLE IF NOT EXISTS quotes_l1") != std::string::npos);
+    assert(ddl.find("DateTime64(9, 'UTC')") != std::string::npos);
+    assert(ddl.find("Float64") != std::string::npos);
+    assert(ddl.find("ENGINE = MergeTree()") != std::string::npos);
+    assert(ddl.find("PARTITION BY toYYYYMM(timestamp_ns)") != std::string::npos);
+
+    // 2. Prepare Batch
+    size_t count = 3;
+    std::vector<int64_t> ts = {1000, 2000, 3000};
+    std::vector<int32_t> sym = {42, 42, 42};
+    std::vector<double> bid_px = {250.0, 251.0, 252.0};
+    std::vector<double> bid_sz = {10.0, 20.0, 30.0};
+    std::vector<double> ask_px = {250.5, 251.5, 252.5};
+    std::vector<double> ask_sz = {15.0, 25.0, 35.0};
+    std::vector<int64_t> seq = {101, 102, 103};
+
+    std::vector<std::shared_ptr<IColumnVector>> cols;
+    cols.push_back(std::make_shared<ColumnVector<int64_t>>(DataType::TimestampNs, ts.data(), count));
+    cols.push_back(std::make_shared<ColumnVector<int32_t>>(DataType::Int32, sym.data(), count));
+    cols.push_back(std::make_shared<ColumnVector<double>>(DataType::Double, bid_px.data(), count));
+    cols.push_back(std::make_shared<ColumnVector<double>>(DataType::Double, bid_sz.data(), count));
+    cols.push_back(std::make_shared<ColumnVector<double>>(DataType::Double, ask_px.data(), count));
+    cols.push_back(std::make_shared<ColumnVector<double>>(DataType::Double, ask_sz.data(), count));
+    cols.push_back(std::make_shared<ColumnVector<int64_t>>(DataType::Int64, seq.data(), count));
+
+    ColumnarBatch batch(schema, cols, count);
+
+    // 3. Encode RowBinary
+    auto encode_or = obsidian::storage::clickhouse::ClickHouseExporter::EncodeRowBinary(batch);
+    assert(encode_or.ok());
+    auto res = encode_or.value();
+    assert(res.rows_encoded == 3);
+
+    // Each row has 7 non-nullable columns: 8 + 4 + 8 + 8 + 8 + 8 + 8 = 52 bytes per row * 3 rows = 156 bytes
+    assert(res.total_bytes == 156);
+    assert(res.binary_payload.size() == 156);
+
+    std::cout << "  -> PASSED\n";
+}
+
 int main() {
     std::cout << "=====================================================\n";
     std::cout << "   Obsidian Lakehouse & Backend Verification Suite   \n";
@@ -673,6 +720,7 @@ int main() {
         TestSchemaValidatorAndDriftDetection();
         TestLakehouseIntegrityGuardAndOrphanDetection();
         TestDuckDBArrowBridgeAndAnalyticalEngine();
+        TestClickHouseExporterAndRowBinaryEncoding();
 
         std::cout << "\n>>> ALL OBSIDIAN LAKEHOUSE TESTS PASSED! <<<\n";
         return 0;
