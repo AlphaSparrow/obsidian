@@ -356,7 +356,7 @@ jobs:
 
       - name: "Setup Windows Ninja"
         if: "runner.os == 'Windows'"
-        uses: "seanmiddleditch/gha-setup-ninja@v5"
+        uses: "seanmiddleditch/gha-setup-ninja@v6"
 
       - name: "Setup MSVC Developer Command Prompt"
         if: "runner.os == 'Windows'"
