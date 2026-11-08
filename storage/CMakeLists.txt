@@ -17,6 +17,8 @@ add_library(obsidian_storage STATIC
     mmap/mmap_file.cpp
     cache/block_cache.hpp
     cache/block_cache.cpp
+    snapshots/snapshot_manager.hpp
+    snapshots/snapshot_manager.cpp
     arrow/columnar_batch.hpp
     parquet/parquet_structures.hpp
     parquet/columnar_file_writer.hpp
