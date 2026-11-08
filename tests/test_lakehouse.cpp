@@ -5,6 +5,12 @@
 #include "storage/arrow/columnar_batch.hpp"
 #include "storage/parquet/columnar_file_writer.hpp"
 #include "storage/parquet/columnar_file_reader.hpp"
+#include "storage/codecs/gorilla.hpp"
+#include "storage/codecs/delta_delta.hpp"
+#include "storage/mmap/mmap_file.hpp"
+#include "storage/cache/block_cache.hpp"
+#include "storage/snapshots/snapshot_manager.hpp"
+#include "storage/dataset/dataset_importer.hpp"
 #include "storage/duckdb/duckdb_bridge.hpp"
 #include "storage/clickhouse/clickhouse_exporter.hpp"
 #include "storage/lakehouse/partition_spec.hpp"
@@ -23,6 +29,11 @@ using namespace obsidian::storage;
 using namespace obsidian::storage::lakehouse;
 using namespace obsidian::storage::schema;
 using namespace obsidian::storage::arrow;
+using namespace obsidian::storage::codecs;
+using namespace obsidian::storage::mmap;
+using namespace obsidian::storage::cache;
+using namespace obsidian::storage::snapshots;
+using namespace obsidian::storage::dataset;
 
 namespace fs = std::filesystem;
 
@@ -704,6 +715,241 @@ void TestClickHouseExporterAndRowBinaryEncoding() {
     std::cout << "  -> PASSED\n";
 }
 
+void TestGorillaPriceCodecAndCorruption() {
+    std::cout << "[TEST] Running TestGorillaPriceCodecAndCorruption...\n";
+    std::vector<double> prices = {100.25, 100.25, 100.50, 100.75, 100.75, 101.125, 101.125, 101.0};
+    
+    // 1. Lossless round-trip compression
+    auto comp_or = GorillaCodec::Compress(prices);
+    assert(comp_or.ok());
+    auto compressed = comp_or.value();
+    assert(!compressed.empty());
+
+    std::vector<double> decompressed;
+    auto dec_status = GorillaCodec::Decompress(compressed, prices.size(), decompressed);
+    assert(dec_status.ok());
+    assert(decompressed.size() == prices.size());
+    for (size_t i = 0; i < prices.size(); ++i) {
+        assert(prices[i] == decompressed[i]);
+    }
+
+    // 2. Anomaly detection: NaN / Inf rejected
+    std::vector<double> corrupted_prices = {100.0, std::numeric_limits<double>::quiet_NaN(), 102.0};
+    auto bad_comp_or = GorillaCodec::Compress(corrupted_prices);
+    assert(!bad_comp_or.ok());
+    assert(bad_comp_or.status().code() == StatusCode::Corruption);
+
+    // 3. Truncated bitstream corruption detection
+    std::vector<uint8_t> truncated_bits(compressed.begin(), compressed.begin() + compressed.size() / 2);
+    std::vector<double> bad_dec;
+    auto trunc_status = GorillaCodec::Decompress(truncated_bits, prices.size(), bad_dec);
+    assert(!trunc_status.ok());
+    assert(trunc_status.code() == StatusCode::Corruption);
+
+    std::cout << "  -> PASSED\n";
+}
+
+void TestDeltaDeltaTimestampCodecAndAnomaly() {
+    std::cout << "[TEST] Running TestDeltaDeltaTimestampCodecAndAnomaly...\n";
+    std::vector<int64_t> timestamps = {
+        1700000000000000000LL,
+        1700000001000000000LL,
+        1700000002000000000LL,
+        1700000003000000000LL,
+        1700000004500000000LL
+    };
+
+    // 1. Compression and decompression roundtrip
+    auto comp_or = DeltaDeltaCodec::CompressTimestamps(timestamps);
+    assert(comp_or.ok());
+    auto compressed = comp_or.value();
+    assert(!compressed.empty());
+
+    std::vector<int64_t> decompressed;
+    auto dec_status = DeltaDeltaCodec::DecompressTimestamps(compressed, timestamps.size(), decompressed);
+    assert(dec_status.ok());
+    assert(decompressed == timestamps);
+
+    // 2. Temporal regression anomaly detection (timestamp decreases)
+    std::vector<int64_t> regressing_ts = {1000, 2000, 1500, 3000};
+    auto reg_comp_or = DeltaDeltaCodec::CompressTimestamps(regressing_ts, /*allow_regression=*/false);
+    assert(!reg_comp_or.ok());
+    assert(reg_comp_or.status().code() == StatusCode::Corruption);
+
+    // 3. Monotonic sequence validation
+    std::vector<int64_t> valid_seq = {1, 2, 3, 4, 5};
+    auto seq_or = DeltaDeltaCodec::CompressMonotonicSequence(valid_seq);
+    assert(seq_or.ok());
+
+    std::vector<int64_t> non_monotonic_seq = {1, 2, 2, 4};
+    auto bad_seq_or = DeltaDeltaCodec::CompressMonotonicSequence(non_monotonic_seq);
+    assert(!bad_seq_or.ok());
+    assert(bad_seq_or.status().code() == StatusCode::Corruption);
+
+    std::cout << "  -> PASSED\n";
+}
+
+void TestMemoryMappedJournalAndTornWriteRecovery() {
+    std::cout << "[TEST] Running TestMemoryMappedJournalAndTornWriteRecovery...\n";
+    std::string test_file = "build/test_env/test_journal.obsd";
+    fs::create_directories("build/test_env");
+    fs::remove(test_file);
+
+    {
+        auto journal_or = MemoryMappedJournal::Open(test_file, MemoryMapMode::ReadWrite, 1024 * 1024);
+        assert(journal_or.ok());
+        auto& journal = journal_or.value();
+
+        // Append 5 valid records
+        for (uint64_t i = 1; i <= 5; ++i) {
+            std::string payload = "RecordPayload_" + std::to_string(i);
+            auto status = journal.AppendRecord(i, std::span<const uint8_t>(reinterpret_cast<const uint8_t*>(payload.data()), payload.size()));
+            assert(status.ok());
+        }
+        assert(journal.RecordCount() == 5);
+        (void)journal.Flush();
+    }
+
+    // Open and run ScanAndRecover
+    {
+        auto journal_or = MemoryMappedJournal::Open(test_file, MemoryMapMode::ReadWrite, 1024 * 1024);
+        assert(journal_or.ok());
+        auto& journal = journal_or.value();
+
+        auto report_or = journal.ScanAndRecover(/*repair_torn_tail=*/true);
+        assert(report_or.ok());
+        auto report = report_or.value();
+        assert(!report.has_torn_write);
+        assert(report.valid_records == 5);
+        assert(journal.RecordCount() == 5);
+
+        // Verify we can append cleanly after scan
+        std::string new_payload = "PostRecoveryRecord_6";
+        auto status = journal.AppendRecord(6, std::span<const uint8_t>(reinterpret_cast<const uint8_t*>(new_payload.data()), new_payload.size()));
+        assert(status.ok());
+        assert(journal.RecordCount() == 6);
+    }
+
+    fs::remove(test_file);
+    std::cout << "  -> PASSED\n";
+}
+
+void TestBlockCacheAndBitRotPoisoningDetection() {
+    std::cout << "[TEST] Running TestBlockCacheAndBitRotPoisoningDetection...\n";
+    BlockCache cache(1024 * 1024, 100);
+
+    std::string key = "column_001_chunk_0";
+    std::vector<uint8_t> payload = {10, 20, 30, 40, 50, 60, 70, 80};
+
+    // 1. Put and Get
+    auto put_st = cache.Put(key, payload);
+    assert(put_st.ok());
+
+    auto get_or = cache.Get(key);
+    assert(get_or.ok());
+    assert(get_or.value() == payload);
+
+    auto metrics = cache.GetMetrics();
+    assert(metrics.hits == 1);
+    assert(metrics.entry_count == 1);
+    assert(metrics.poisoning_detections == 0);
+
+    // 2. Capacity eviction
+    BlockCache small_cache(100, 2);
+    std::vector<uint8_t> b1(40, 1), b2(40, 2), b3(40, 3);
+    assert(small_cache.Put("k1", b1).ok());
+    assert(small_cache.Put("k2", b2).ok());
+    assert(small_cache.Put("k3", b3).ok()); // Triggers eviction of k1
+    assert(!small_cache.Get("k1").ok()); // k1 was evicted
+    assert(small_cache.Get("k2").ok());
+    assert(small_cache.Get("k3").ok());
+
+    std::cout << "  -> PASSED\n";
+}
+
+void TestSnapshotManagerLineageAndOCC() {
+    std::cout << "[TEST] Running TestSnapshotManagerLineageAndOCC...\n";
+    SnapshotManager sm;
+
+    // 1. Commit snapshots
+    auto st1 = sm.CommitSnapshot(1, -1, 1000, "manifest_v1.json", "append", {"symbol=BTC/year=2026"}, 1, 100, 4096);
+    assert(st1.ok());
+
+    auto st2 = sm.CommitSnapshot(2, 1, 2000, "manifest_v2.json", "append", {"symbol=ETH/year=2026"}, 1, 100, 4096);
+    assert(st2.ok());
+
+    // 2. Lineage integrity check
+    auto lin_st = sm.ValidateLineage();
+    assert(lin_st.ok());
+
+    // 3. Time travel
+    auto snap_as_of = sm.GetSnapshotAsOf(1500);
+    assert(snap_as_of.ok());
+    assert(snap_as_of.value().snapshot_id == 1);
+
+    auto snap_head = sm.GetCurrentSnapshot();
+    assert(snap_head.ok());
+    assert(snap_head.value().snapshot_id == 2);
+
+    // 4. OCC Conflict detection
+    auto conflict_st = sm.DetectCommitConflicts(1, {"symbol=ETH/year=2026"});
+    assert(!conflict_st.ok());
+    assert(conflict_st.code() == StatusCode::ConcurrentModification);
+
+    // Non-conflicting commit to SOL
+    auto no_conflict = sm.DetectCommitConflicts(1, {"symbol=SOL/year=2026"});
+    assert(no_conflict.ok());
+
+    // 5. Pinning guard against expiration
+    assert(sm.PinSnapshot(1).ok());
+    auto exp_fail = sm.CanExpireSnapshot(1);
+    assert(!exp_fail.ok()); // Pinned!
+
+    assert(sm.UnpinSnapshot(1).ok());
+    auto exp_ok = sm.CanExpireSnapshot(1);
+    assert(exp_ok.ok()); // Safe to expire
+
+    std::cout << "  -> PASSED\n";
+}
+
+void TestDatasetImporterAndAnomalyDetection() {
+    std::cout << "[TEST] Running TestDatasetImporterAndAnomalyDetection...\n";
+    std::string csv_content = 
+        "timeOpen;timeClose;timeHigh;timeLow;name;open;high;low;close;volume;marketCap;circulatingSupply;timestamp\n"
+        "\"2026-10-31T00:00:00.000Z\";\"2026-10-31T23:59:59.999Z\";\"2026-10-31T17:55:00.000Z\";\"2026-10-31T03:55:00.000Z\";\"BTC\";77198.2;77629.7;77000.6;77434.7;12266900.0;155684730.0;20105365;\"2026-10-31T23:59:59.999Z\"\n"
+        "\"2026-10-30T00:00:00.000Z\";\"2026-10-30T23:59:59.999Z\";\"2026-10-30T06:31:00.000Z\";\"2026-10-30T18:54:00.000Z\";\"BTC\";77775.1;78647.3;76189.8;77198.2;45889366.0;155208911.0;20105365;\"2026-10-30T23:59:59.999Z\"\n"
+        "\"2026-10-29T00:00:00.000Z\";\"2026-10-29T23:59:59.999Z\";\"2026-10-29T16:10:00.000Z\";\"2026-10-29T23:54:00.000Z\";\"BTC\";81267.5;81889.9;77737.1;77775.1;40885931.0;156361605.0;20105365;\"2026-10-29T23:59:59.999Z\"\n";
+
+    // 1. Ingest clean CSV
+    auto res_or = DatasetImporter::ImportCsvContent(csv_content, 101);
+    assert(res_or.ok());
+    auto res = res_or.value();
+    assert(res.total_rows_read == 3);
+    assert(res.valid_rows == 3);
+    assert(res.quarantined_rows == 0);
+    assert(res.batch != nullptr);
+    assert(res.batch->RowCount() == 3);
+    assert(res.min_timestamp_ns < res.max_timestamp_ns);
+
+    // 2. Financial anomaly: High < Low and negative price quarantine
+    std::string anomalous_csv = 
+        "timeOpen;open;high;low;close;volume\n"
+        "\"2026-10-31T00:00:00.000Z\";100.0;90.0;110.0;105.0;500.0\n"
+        "\"2026-10-30T00:00:00.000Z\";-50.0;100.0;40.0;90.0;500.0\n"
+        "\"2026-10-29T00:00:00.000Z\";100.0;120.0;80.0;110.0;1000.0\n";
+
+    auto anom_or = DatasetImporter::ImportCsvContent(anomalous_csv, 102, 86400000, /*quarantine_invalid_rows=*/true);
+    assert(anom_or.ok());
+    auto anom_res = anom_or.value();
+    assert(anom_res.total_rows_read == 3);
+    assert(anom_res.valid_rows == 1);
+    assert(anom_res.quarantined_rows == 2);
+    assert(anom_res.anomalies.high_less_than_low_count == 1);
+    assert(anom_res.anomalies.negative_or_zero_price_count == 1);
+
+    std::cout << "  -> PASSED\n";
+}
+
 int main() {
     std::cout << "=====================================================\n";
     std::cout << "   Obsidian Lakehouse & Backend Verification Suite   \n";
@@ -721,6 +967,12 @@ int main() {
         TestLakehouseIntegrityGuardAndOrphanDetection();
         TestDuckDBArrowBridgeAndAnalyticalEngine();
         TestClickHouseExporterAndRowBinaryEncoding();
+        TestGorillaPriceCodecAndCorruption();
+        TestDeltaDeltaTimestampCodecAndAnomaly();
+        TestMemoryMappedJournalAndTornWriteRecovery();
+        TestBlockCacheAndBitRotPoisoningDetection();
+        TestSnapshotManagerLineageAndOCC();
+        TestDatasetImporterAndAnomalyDetection();
 
         std::cout << "\n>>> ALL OBSIDIAN LAKEHOUSE TESTS PASSED! <<<\n";
         return 0;
