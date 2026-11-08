@@ -13,6 +13,8 @@ add_library(obsidian_storage STATIC
     codecs/gorilla.cpp
     codecs/delta_delta.hpp
     codecs/delta_delta.cpp
+    mmap/mmap_file.hpp
+    mmap/mmap_file.cpp
     arrow/columnar_batch.hpp
     parquet/parquet_structures.hpp
     parquet/columnar_file_writer.hpp
