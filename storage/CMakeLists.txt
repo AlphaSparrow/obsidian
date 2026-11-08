@@ -19,6 +19,8 @@ add_library(obsidian_storage STATIC
     lakehouse/partition_spec.hpp
     lakehouse/manifest_manager.hpp
     lakehouse/manifest_manager.cpp
+    lakehouse/integrity_guard.hpp
+    lakehouse/integrity_guard.cpp
     lakehouse/transaction.hpp
     lakehouse/transaction.cpp
     lakehouse/lakehouse_table.hpp

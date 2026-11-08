@@ -9,6 +9,7 @@
 #include "storage/lakehouse/manifest_manager.hpp"
 #include "storage/lakehouse/lakehouse_table.hpp"
 #include "storage/lakehouse/transaction.hpp"
+#include "storage/lakehouse/integrity_guard.hpp"
 #include "storage/lakehouse/compaction_engine.hpp"
 #include "storage/lakehouse/catalog.hpp"
 
@@ -501,6 +502,91 @@ void TestSchemaValidatorAndDriftDetection() {
     std::cout << "  -> PASSED\n";
 }
 
+void TestLakehouseIntegrityGuardAndOrphanDetection() {
+    std::cout << "[TEST] Running TestLakehouseIntegrityGuardAndOrphanDetection...\n";
+    std::string table_loc = "build/test_env/integrity_test_table";
+    auto fs = LocalFileSystem::Default();
+    fs->DeleteRecursively(table_loc);
+
+    auto schema = TradeTick::GetSchema();
+    PartitionSpec spec(1, {{"exchange", "exchange", PartitionTransform::Identity, 0}});
+
+    auto table_or = LakehouseTable::Create(table_loc, "trades_audit", schema, spec, fs);
+    assert(table_or.ok());
+    auto table = table_or.value();
+
+    std::string valid_file = table_loc + "/exchange=NASDAQ/part-1.parquet";
+    fs->WriteFileAtomic(valid_file, "valid data payload");
+
+    // Commit 1 valid file
+    {
+        auto tx = table->NewTransaction(OperationType::Append);
+        DataFile df{};
+        df.path = valid_file;
+        df.format = "parquet";
+        df.file_size_bytes = 18;
+        df.record_count = 100;
+        df.partitions = {{"exchange", "NASDAQ"}};
+        df.min_values["price"] = "100.5";
+        df.max_values["price"] = "105.0";
+        tx->AppendFile(df);
+        assert(tx->Commit().ok());
+    }
+
+    LakehouseIntegrityGuard guard(fs);
+
+    // 1. Audit clean table: must be healthy
+    auto audit_clean = guard.Audit(*table);
+    assert(audit_clean.ok());
+    assert(audit_clean.value().is_healthy);
+    assert(audit_clean.value().active_data_files == 1);
+    assert(audit_clean.value().missing_data_files == 0);
+    assert(audit_clean.value().orphan_data_files == 0);
+    assert(audit_clean.value().boundary_anomalies_count == 0);
+
+    // 2. Inverted Boundary Anomaly: Commit a file with min > max
+    std::string anom_file = table_loc + "/exchange=NASDAQ/part-2.parquet";
+    fs->WriteFileAtomic(anom_file, "anomaly file payload");
+    {
+        auto tx = table->NewTransaction(OperationType::Append);
+        DataFile df_anom{};
+        df_anom.path = anom_file;
+        df_anom.format = "parquet";
+        df_anom.file_size_bytes = 20;
+        df_anom.record_count = 50;
+        df_anom.partitions = {{"exchange", "NASDAQ"}};
+        df_anom.min_values["price"] = "200.0"; // MIN > MAX ANOMALY!
+        df_anom.max_values["price"] = "150.0";
+        tx->AppendFile(df_anom);
+        assert(tx->Commit().ok());
+    }
+
+    auto audit_anom = guard.Audit(*table);
+    assert(audit_anom.ok());
+    assert(!audit_anom.value().is_healthy);
+    assert(audit_anom.value().boundary_anomalies_count >= 1);
+
+    // 3. Orphan File Leak Detection: create untracked staging file
+    std::string orphan_file = table_loc + "/exchange=NASDAQ/orphan-staging.parquet";
+    fs->WriteFileAtomic(orphan_file, "leaked staging data from crashed transaction");
+
+    auto audit_orphan = guard.Audit(*table);
+    assert(audit_orphan.ok());
+    assert(!audit_orphan.value().is_healthy);
+    assert(audit_orphan.value().orphan_data_files == 1);
+    assert(!audit_orphan.value().orphan_file_paths.empty());
+
+    // 4. Purge orphan files
+    auto clean_st = guard.CleanOrphanFiles(audit_orphan.value().orphan_file_paths);
+    assert(clean_st.ok());
+
+    auto audit_post_clean = guard.Audit(*table);
+    assert(audit_post_clean.ok());
+    assert(audit_post_clean.value().orphan_data_files == 0);
+
+    std::cout << "  -> PASSED\n";
+}
+
 int main() {
     std::cout << "=====================================================\n";
     std::cout << "   Obsidian Lakehouse & Backend Verification Suite   \n";
@@ -515,6 +601,7 @@ int main() {
         TestLakehouseCatalog();
         TestColumnarFileWriterAndReader();
         TestSchemaValidatorAndDriftDetection();
+        TestLakehouseIntegrityGuardAndOrphanDetection();
 
         std::cout << "\n>>> ALL OBSIDIAN LAKEHOUSE TESTS PASSED! <<<\n";
         return 0;
