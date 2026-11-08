@@ -2,6 +2,8 @@
 #include "storage/common/file_system.hpp"
 #include "storage/schema/market_data_schema.hpp"
 #include "storage/arrow/columnar_batch.hpp"
+#include "storage/parquet/columnar_file_writer.hpp"
+#include "storage/parquet/columnar_file_reader.hpp"
 #include "storage/lakehouse/partition_spec.hpp"
 #include "storage/lakehouse/manifest_manager.hpp"
 #include "storage/lakehouse/lakehouse_table.hpp"
@@ -316,6 +318,93 @@ void TestLakehouseCatalog() {
     std::cout << "  -> PASSED\n";
 }
 
+void TestColumnarFileWriterAndReader() {
+    std::cout << "[TEST] Running TestColumnarFileWriterAndReader...\n";
+    std::string test_file = "build/test_env/columnar_test.obsd";
+    auto fs = LocalFileSystem::Default();
+    fs->DeleteFile(test_file);
+
+    // 1. Prepare ColumnarBatch with 5 rows of QuoteL1 data
+    auto quote_schema = QuoteL1::GetSchema();
+    size_t count = 5;
+
+    std::vector<int64_t> ts_data = {1000000000LL, 1000001000LL, 1000002000LL, 1000003000LL, 1000004000LL};
+    std::vector<int32_t> sym_data = {101, 101, 101, 101, 101};
+    std::vector<double> bid_px = {150.25, 150.30, 150.20, 150.35, 150.40};
+    std::vector<double> bid_sz = {100.0, 200.0, 150.0, 300.0, 250.0};
+    std::vector<double> ask_px = {150.30, 150.35, 150.25, 150.40, 150.45};
+    std::vector<double> ask_sz = {120.0, 180.0, 210.0, 190.0, 310.0};
+    std::vector<int64_t> seq_data = {1, 2, 3, 4, 5};
+
+    std::vector<std::shared_ptr<IColumnVector>> cols;
+    cols.push_back(std::make_shared<ColumnVector<int64_t>>(DataType::TimestampNs, ts_data.data(), count));
+    cols.push_back(std::make_shared<ColumnVector<int32_t>>(DataType::Int32, sym_data.data(), count));
+    cols.push_back(std::make_shared<ColumnVector<double>>(DataType::Double, bid_px.data(), count));
+    cols.push_back(std::make_shared<ColumnVector<double>>(DataType::Double, bid_sz.data(), count));
+    cols.push_back(std::make_shared<ColumnVector<double>>(DataType::Double, ask_px.data(), count));
+    cols.push_back(std::make_shared<ColumnVector<double>>(DataType::Double, ask_sz.data(), count));
+    cols.push_back(std::make_shared<ColumnVector<int64_t>>(DataType::Int64, seq_data.data(), count));
+
+    ColumnarBatch batch(quote_schema, cols, count);
+    assert(batch.num_rows() == 5);
+    assert(batch.num_columns() == 7);
+
+    // 2. Write Columnar Batch to disk
+    obsidian::storage::parquet::ColumnarFileWriter writer(fs);
+    auto write_or = writer.Write(test_file, batch, {{"exchange", "NASDAQ"}, {"date", "2026-11-08"}});
+    assert(write_or.ok());
+
+    auto df = write_or.value();
+    assert(df.path == test_file);
+    assert(df.record_count == 5);
+    assert(df.file_size_bytes > 0);
+    assert(df.partitions.size() == 2);
+    assert(df.min_values.find("bid_price") != df.min_values.end());
+    assert(df.min_values["bid_price"].find("150.2") != std::string::npos);
+    assert(df.max_values["bid_price"].find("150.4") != std::string::npos);
+
+    // 3. Open and Read back with ColumnarFileReader
+    auto reader_or = obsidian::storage::parquet::ColumnarFileReader::Open(test_file, fs);
+    assert(reader_or.ok());
+    auto reader = std::move(reader_or.value());
+
+    assert(reader->num_rows() == 5);
+    assert(reader->num_columns() == 7);
+    assert(reader->min_values().at("bid_price") == df.min_values["bid_price"]);
+    assert(reader->max_values().at("bid_price") == df.max_values["bid_price"]);
+
+    // Full Read
+    auto read_all_or = reader->ReadAll();
+    assert(read_all_or.ok());
+    auto loaded_batch = read_all_or.value();
+    assert(loaded_batch->num_rows() == 5);
+    assert(loaded_batch->num_columns() == 7);
+
+    auto loaded_bid_px = loaded_batch->GetTypedColumn<double>(2);
+    assert((*loaded_bid_px)[0] == 150.25);
+    assert((*loaded_bid_px)[4] == 150.40);
+
+    // Verify 64-byte alignment
+    uintptr_t raw_ptr = reinterpret_cast<uintptr_t>(loaded_bid_px->raw_data());
+    assert(raw_ptr % 64 == 0);
+    (void)raw_ptr;
+
+    // Projection Pushdown: Read only "timestamp_ns" and "bid_price"
+    auto proj_or = reader->ReadColumns({"timestamp_ns", "bid_price"});
+    assert(proj_or.ok());
+    auto proj_batch = proj_or.value();
+    assert(proj_batch->num_columns() == 2);
+    assert(proj_batch->num_rows() == 5);
+    assert(proj_batch->schema().fields()[0].name() == "timestamp_ns");
+    assert(proj_batch->schema().fields()[1].name() == "bid_price");
+
+    auto proj_px = proj_batch->GetTypedColumn<double>(1);
+    assert((*proj_px)[0] == 150.25);
+    assert((*proj_px)[3] == 150.35);
+
+    std::cout << "  -> PASSED\n";
+}
+
 int main() {
     std::cout << "=====================================================\n";
     std::cout << "   Obsidian Lakehouse & Backend Verification Suite   \n";
@@ -328,6 +417,7 @@ int main() {
         TestLakehouseTableTransactionsAndOCC();
         TestCompactionAndVacuum();
         TestLakehouseCatalog();
+        TestColumnarFileWriterAndReader();
 
         std::cout << "\n>>> ALL OBSIDIAN LAKEHOUSE TESTS PASSED! <<<\n";
         return 0;

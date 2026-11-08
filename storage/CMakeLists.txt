@@ -6,6 +6,11 @@ add_library(obsidian_storage STATIC
     common/status.hpp
     schema/market_data_schema.hpp
     arrow/columnar_batch.hpp
+    parquet/parquet_structures.hpp
+    parquet/columnar_file_writer.hpp
+    parquet/columnar_file_writer.cpp
+    parquet/columnar_file_reader.hpp
+    parquet/columnar_file_reader.cpp
     lakehouse/lakehouse_structures.hpp
     lakehouse/partition_spec.hpp
     lakehouse/manifest_manager.hpp
