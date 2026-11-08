@@ -1,6 +1,7 @@
 #include "storage/common/status.hpp"
 #include "storage/common/file_system.hpp"
 #include "storage/schema/market_data_schema.hpp"
+#include "storage/schema/schema_validator.hpp"
 #include "storage/arrow/columnar_batch.hpp"
 #include "storage/parquet/columnar_file_writer.hpp"
 #include "storage/parquet/columnar_file_reader.hpp"
@@ -430,6 +431,76 @@ void TestColumnarFileWriterAndReader() {
     std::cout << "  -> PASSED\n";
 }
 
+void TestSchemaValidatorAndDriftDetection() {
+    std::cout << "[TEST] Running TestSchemaValidatorAndDriftDetection...\n";
+    auto base_schema = QuoteL1::GetSchema();
+
+    // 1. Identical Schema passes
+    auto identical_res = SchemaValidator::ValidateCompatibility(base_schema, base_schema);
+    assert(identical_res.is_valid);
+    assert(!identical_res.requires_evolution);
+    assert(identical_res.drift_errors.empty());
+
+    // 2. Incompatible Type Drift: bid_price changed from Double to Boolean
+    Schema drifted_schema({
+        {"timestamp_ns", DataType::TimestampNs, false},
+        {"symbol_id", DataType::Int32, false},
+        {"bid_price", DataType::Boolean, false}, // ERROR: Incompatible!
+        {"bid_size", DataType::Double, false},
+        {"ask_price", DataType::Double, false},
+        {"ask_size", DataType::Double, false},
+        {"sequence_num", DataType::Int64, false}
+    });
+    auto drift_res = SchemaValidator::ValidateCompatibility(base_schema, drifted_schema);
+    assert(!drift_res.is_valid);
+    assert(!drift_res.drift_errors.empty());
+    assert(drift_res.drift_errors[0].find("Incompatible type drift in column 'bid_price'") != std::string::npos);
+
+    // 3. Missing Required Non-Nullable Column
+    Schema missing_col_schema({
+        {"symbol_id", DataType::Int32, false},
+        {"bid_price", DataType::Double, false}
+    });
+    auto missing_res = SchemaValidator::ValidateCompatibility(base_schema, missing_col_schema);
+    assert(!missing_res.is_valid);
+    assert(!missing_res.drift_errors.empty());
+    assert(missing_res.drift_errors[0].find("Missing required non-nullable column") != std::string::npos);
+
+    // 4. Safe Type Widening: symbol_id from Int32 -> Int64
+    Schema widened_schema({
+        {"timestamp_ns", DataType::TimestampNs, false},
+        {"symbol_id", DataType::Int64, false}, // WIDENED
+        {"bid_price", DataType::Double, false},
+        {"bid_size", DataType::Double, false},
+        {"ask_price", DataType::Double, false},
+        {"ask_size", DataType::Double, false},
+        {"sequence_num", DataType::Int64, false}
+    });
+    auto widen_res = SchemaValidator::ValidateCompatibility(base_schema, widened_schema);
+    assert(widen_res.is_valid);
+    assert(widen_res.requires_evolution);
+    assert(widen_res.evolved_schema.fields()[1].type() == DataType::Int64);
+
+    // 5. Additive Evolution: new optional field added
+    Schema additive_schema = base_schema;
+    std::vector<Field> add_fields = base_schema.fields();
+    add_fields.emplace_back("exchange_fee", DataType::Double, true);
+    Schema evolved_input(add_fields);
+
+    auto add_res = SchemaValidator::ValidateCompatibility(base_schema, evolved_input, true);
+    assert(add_res.is_valid);
+    assert(add_res.requires_evolution);
+    assert(add_res.evolved_schema.num_fields() == 8);
+    assert(add_res.evolved_schema.HasField("exchange_fee"));
+
+    // Additive evolution disallowed flag
+    auto strict_res = SchemaValidator::ValidateCompatibility(base_schema, evolved_input, false);
+    assert(!strict_res.is_valid);
+    assert(!strict_res.drift_errors.empty());
+
+    std::cout << "  -> PASSED\n";
+}
+
 int main() {
     std::cout << "=====================================================\n";
     std::cout << "   Obsidian Lakehouse & Backend Verification Suite   \n";
@@ -443,6 +514,7 @@ int main() {
         TestCompactionAndVacuum();
         TestLakehouseCatalog();
         TestColumnarFileWriterAndReader();
+        TestSchemaValidatorAndDriftDetection();
 
         std::cout << "\n>>> ALL OBSIDIAN LAKEHOUSE TESTS PASSED! <<<\n";
         return 0;

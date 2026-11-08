@@ -7,6 +7,8 @@ add_library(obsidian_storage STATIC
     common/crc32c.hpp
     common/crc32c.cpp
     schema/market_data_schema.hpp
+    schema/schema_validator.hpp
+    schema/schema_validator.cpp
     arrow/columnar_batch.hpp
     parquet/parquet_structures.hpp
     parquet/columnar_file_writer.hpp
