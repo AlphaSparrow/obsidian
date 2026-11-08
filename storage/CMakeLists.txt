@@ -19,6 +19,8 @@ add_library(obsidian_storage STATIC
     cache/block_cache.cpp
     snapshots/snapshot_manager.hpp
     snapshots/snapshot_manager.cpp
+    dataset/dataset_importer.hpp
+    dataset/dataset_importer.cpp
     arrow/columnar_batch.hpp
     parquet/parquet_structures.hpp
     parquet/columnar_file_writer.hpp
