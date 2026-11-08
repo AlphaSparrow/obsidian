@@ -11,6 +11,8 @@ add_library(obsidian_storage STATIC
     schema/schema_validator.cpp
     codecs/gorilla.hpp
     codecs/gorilla.cpp
+    codecs/delta_delta.hpp
+    codecs/delta_delta.cpp
     arrow/columnar_batch.hpp
     parquet/parquet_structures.hpp
     parquet/columnar_file_writer.hpp
