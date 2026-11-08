@@ -1,4 +1,5 @@
 #include "columnar_file_writer.hpp"
+#include "storage/common/crc32c.hpp"
 #include <algorithm>
 #include <limits>
 #include <cstring>
@@ -189,12 +190,14 @@ StatusOr<lakehouse::DataFile> ColumnarFileWriter::Write(
         WriteVal(buffer, lay.null_count);
         WriteVal(buffer, static_cast<uint64_t>(0)); // null_bitmap_offset placeholder
         WriteVal(buffer, lay.null_bitmap_bytes);
+        WriteVal(buffer, static_cast<uint32_t>(0)); // crc32c placeholder
     }
 
-    // Record the byte positions where data_offset and null_bitmap_offset need patching
+    // Record the byte positions where data_offset, null_bitmap_offset, and crc32c need patching
     struct PatchLocation {
         size_t data_offset_pos;
         size_t null_offset_pos;
+        size_t crc32c_pos;
     };
     std::vector<PatchLocation> patch_positions;
     patch_positions.reserve(num_cols);
@@ -219,6 +222,8 @@ StatusOr<lakehouse::DataFile> ColumnarFileWriter::Write(
         scan_pos += sizeof(uint64_t) + sizeof(uint64_t) + sizeof(uint64_t); // data_offset + data_bytes + null_count
         loc.null_offset_pos = scan_pos;
         scan_pos += sizeof(uint64_t) + sizeof(uint64_t); // null_bitmap_offset + null_bitmap_bytes
+        loc.crc32c_pos = scan_pos;
+        scan_pos += sizeof(uint32_t); // crc32c
 
         patch_positions.push_back(loc);
     }
@@ -231,9 +236,12 @@ StatusOr<lakehouse::DataFile> ColumnarFileWriter::Write(
         AlignBuffer(buffer, 64);
         uint64_t data_offset = static_cast<uint64_t>(buffer.size());
 
+        uint32_t col_crc = 0;
+
         // Write raw column payload
         if (lay.data_bytes > 0 && col->raw_data()) {
             buffer.append(static_cast<const char*>(col->raw_data()), lay.data_bytes);
+            col_crc = common::CRC32C::Calculate(col->raw_data(), lay.data_bytes);
         }
 
         // Patch data_offset
@@ -251,10 +259,14 @@ StatusOr<lakehouse::DataFile> ColumnarFileWriter::Write(
                 }
             }
             buffer.append(reinterpret_cast<const char*>(bitmap.data()), bitmap.size());
+            col_crc = common::CRC32C::Calculate(bitmap.data(), bitmap.size(), col_crc);
         }
 
         // Patch null_bitmap_offset
         std::memcpy(buffer.data() + patch_positions[i].null_offset_pos, &null_offset, sizeof(uint64_t));
+
+        // Patch crc32c
+        std::memcpy(buffer.data() + patch_positions[i].crc32c_pos, &col_crc, sizeof(uint32_t));
     }
 
     // 3. Footer Magic
@@ -288,3 +300,4 @@ StatusOr<lakehouse::DataFile> ColumnarFileWriter::Write(
 } // namespace parquet
 } // namespace storage
 } // namespace obsidian
+

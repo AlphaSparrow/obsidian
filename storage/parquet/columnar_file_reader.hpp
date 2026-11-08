@@ -47,6 +47,7 @@ private:
         uint64_t null_count{0};
         uint64_t null_bitmap_offset{0};
         uint64_t null_bitmap_bytes{0};
+        uint32_t crc32c{0};
     };
 
     std::shared_ptr<arrow::IColumnVector> ConstructColumnVector(
@@ -68,3 +69,4 @@ private:
 } // namespace parquet
 } // namespace storage
 } // namespace obsidian
+

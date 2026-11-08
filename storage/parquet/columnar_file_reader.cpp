@@ -1,5 +1,6 @@
 #include "columnar_file_reader.hpp"
 #include "columnar_file_writer.hpp"
+#include "storage/common/crc32c.hpp"
 #include <cstring>
 #include <stdexcept>
 
@@ -92,6 +93,7 @@ StatusOr<std::unique_ptr<ColumnarFileReader>> ColumnarFileReader::Open(
             meta.null_count = ReadVal<uint64_t>(ptr, end);
             meta.null_bitmap_offset = ReadVal<uint64_t>(ptr, end);
             meta.null_bitmap_bytes = ReadVal<uint64_t>(ptr, end);
+            meta.crc32c = ReadVal<uint32_t>(ptr, end);
 
             fields.emplace_back(meta.name, meta.type, meta.nullable);
             if (!meta.min_val.empty()) {
@@ -166,6 +168,15 @@ StatusOr<std::shared_ptr<arrow::ColumnarBatch>> ColumnarFileReader::ReadAll() {
             std::memcpy(null_bitmap.data(), base_ptr + meta.null_bitmap_offset, meta.null_bitmap_bytes);
         }
 
+        // Verify CRC32C checksum for bit-rot and corruption detection
+        uint32_t computed_crc = common::CRC32C::Calculate(raw_data, meta.data_bytes);
+        if (meta.null_bitmap_bytes > 0) {
+            computed_crc = common::CRC32C::Calculate(null_bitmap.data(), null_bitmap.size(), computed_crc);
+        }
+        if (computed_crc != meta.crc32c) {
+            return Status(StatusCode::DataLoss, "Bit-rot or corrupted block detected: CRC32C mismatch in column '" + meta.name + "'");
+        }
+
         try {
             columns.push_back(ConstructColumnVector(meta, raw_data, null_bitmap));
         } catch (const std::exception& e) {
@@ -211,6 +222,15 @@ StatusOr<std::shared_ptr<arrow::ColumnarBatch>> ColumnarFileReader::ReadColumns(
             std::memcpy(null_bitmap.data(), base_ptr + meta.null_bitmap_offset, meta.null_bitmap_bytes);
         }
 
+        // Verify CRC32C checksum for bit-rot and corruption detection
+        uint32_t computed_crc = common::CRC32C::Calculate(raw_data, meta.data_bytes);
+        if (meta.null_bitmap_bytes > 0) {
+            computed_crc = common::CRC32C::Calculate(null_bitmap.data(), null_bitmap.size(), computed_crc);
+        }
+        if (computed_crc != meta.crc32c) {
+            return Status(StatusCode::DataLoss, "Bit-rot or corrupted block detected: CRC32C mismatch in column '" + meta.name + "'");
+        }
+
         try {
             projected_columns.push_back(ConstructColumnVector(meta, raw_data, null_bitmap));
         } catch (const std::exception& e) {
@@ -225,3 +245,4 @@ StatusOr<std::shared_ptr<arrow::ColumnarBatch>> ColumnarFileReader::ReadColumns(
 } // namespace parquet
 } // namespace storage
 } // namespace obsidian
+

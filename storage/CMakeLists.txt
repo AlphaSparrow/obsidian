@@ -4,6 +4,8 @@ add_library(obsidian_storage STATIC
     common/file_system.hpp
     common/file_system.cpp
     common/status.hpp
+    common/crc32c.hpp
+    common/crc32c.cpp
     schema/market_data_schema.hpp
     arrow/columnar_batch.hpp
     parquet/parquet_structures.hpp

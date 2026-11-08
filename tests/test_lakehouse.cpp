@@ -402,6 +402,31 @@ void TestColumnarFileWriterAndReader() {
     assert((*proj_px)[0] == 150.25);
     assert((*proj_px)[3] == 150.35);
 
+    // 4. Test Bit-Rot & Data Corruption Error Detection via CRC32C
+    {
+        std::string corrupted_file = "build/test_env/corrupted_test.obsd";
+        auto copy_st = fs->CopyFile(test_file, corrupted_file);
+        assert(copy_st.ok());
+
+        auto raw_text_or = fs->ReadAllText(corrupted_file);
+        assert(raw_text_or.ok());
+        std::string raw_bytes = raw_text_or.value();
+
+        // Corrupt a byte in the column payload area
+        raw_bytes[raw_bytes.size() - 50] ^= 0xFF;
+        auto write_corrupted = fs->WriteFileAtomic(corrupted_file, raw_bytes);
+        assert(write_corrupted.ok());
+
+        auto corrupt_reader_or = obsidian::storage::parquet::ColumnarFileReader::Open(corrupted_file, fs);
+        assert(corrupt_reader_or.ok());
+        auto corrupt_reader = std::move(corrupt_reader_or.value());
+
+        auto read_corrupt_st = corrupt_reader->ReadAll();
+        assert(!read_corrupt_st.ok());
+        assert(read_corrupt_st.status().code() == StatusCode::DataLoss);
+        assert(read_corrupt_st.status().message().find("CRC32C mismatch") != std::string::npos);
+    }
+
     std::cout << "  -> PASSED\n";
 }
 
