@@ -42,7 +42,7 @@ jobs:
         run: "cmake --build --preset ci-linux-sanitizers"
 
       - name: "Run DDIA Invariant & Sanitizer Tests"
-        run: "ctest --preset ci-linux-sanitizers"
+        run: "ctest --preset ci-linux-sanitizers --output-on-failure"
 
       - name: "Execute DDIA Latency & SLA Microbenchmark"
         run: |
@@ -98,7 +98,7 @@ jobs:
       - name: "Execute Concurrency Tests under TSan"
         env:
           TSAN_OPTIONS: "halt_on_error=1 abort_on_error=1 second_deadlock_stack=1 history_size=7"
-        run: "ctest --preset ci-linux-tsan"
+        run: "ctest --preset ci-linux-tsan --output-on-failure"
 
       - name: "Publish TSan Concurrency Report to Job Summary"
         if: always()
@@ -148,7 +148,7 @@ jobs:
                    --std=c++20 \
                    --error-exitcode=1 \
                    --quiet \
-                   kernel storage compute tests
+                   kernel storage compute runtime tests
 
       - name: "Configure CMake with Clang-Tidy (ci-static-analysis)"
         run: "cmake --preset ci-static-analysis"
@@ -196,7 +196,7 @@ jobs:
         run: "cmake --build --preset ci-coverage"
 
       - name: "Execute Test Suite to Generate Coverage Counters"
-        run: "ctest --preset ci-coverage"
+        run: "ctest --preset ci-coverage --output-on-failure"
 
       - name: "Capture & Filter LCOV Data"
         run: |
@@ -376,7 +376,7 @@ jobs:
         run: "cmake --build --preset ${{ matrix.preset }}"
 
       - name: "Run CTest Suite (Lakehouse + DDIA)"
-        run: "ctest --preset ${{ matrix.preset }}"
+        run: "ctest --preset ${{ matrix.preset }} --output-on-failure"
 
       - name: "Package Distribution (CPack)"
         run: "cpack --preset ${{ matrix.preset }}"
