@@ -40,3 +40,24 @@ target_link_libraries(obsidian_ddia_tests
 )
 
 add_test(NAME DDIA_InternalsTests COMMAND obsidian_ddia_tests)
+
+add_executable(obsidian_runtime_tests
+    test_runtime.cpp
+)
+
+target_include_directories(obsidian_runtime_tests
+    PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/..
+)
+
+target_link_libraries(obsidian_runtime_tests
+    PRIVATE
+        obsidian_runtime
+        obsidian_storage
+        obsidian_kernel
+        obsidian::tuning
+        obsidian::warnings
+        obsidian::sanitizers
+)
+
+add_test(NAME RuntimeTests COMMAND obsidian_runtime_tests)
