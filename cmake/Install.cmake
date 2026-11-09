@@ -23,6 +23,7 @@ install(TARGETS
         obsidian_sanitizers
         obsidian_malloc
         obsidian_storage
+        obsidian_runtime
     EXPORT ObsidianTargets
     ARCHIVE  DESTINATION ${CMAKE_INSTALL_LIBDIR}     COMPONENT development
     LIBRARY  DESTINATION ${CMAKE_INSTALL_LIBDIR}     COMPONENT development
@@ -53,6 +54,12 @@ install(DIRECTORY kernel/
 
 install(DIRECTORY storage/
     DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/obsidian/storage
+    COMPONENT development
+    FILES_MATCHING PATTERN "*.hpp" PATTERN "*.h"
+)
+
+install(DIRECTORY runtime/
+    DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/obsidian/runtime
     COMPONENT development
     FILES_MATCHING PATTERN "*.hpp" PATTERN "*.h"
 )
