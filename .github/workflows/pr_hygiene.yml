@@ -9,6 +9,10 @@ concurrency:
   group: "pr-hygiene-${{ github.event.pull_request.number || github.ref }}"
   cancel-in-progress: true
 
+permissions:
+  contents: read
+  pull-requests: read
+
 jobs:
   pr-compliance:
     name: "PR Title & Conventional Commits Linter"
@@ -25,14 +29,17 @@ jobs:
           python-version: "3.11"
 
       - name: "Validate PR Title"
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
         run: |
-          pr_title="${{ github.event.pull_request.title }}"
-          echo "Inspecting Pull Request title: '$pr_title'"
-          if ! echo "$pr_title" | grep -Eq '^(feat|fix|docs|style|refactor|perf|test|build|ci|chore|revert)(\([a-zA-Z0-9_\-\.\/]+\))?(!)?: .{1,100}'; then
-            echo "::error::PR title '$pr_title' does not adhere to Conventional Commits format! Expected: 'type(scope): summary'"
+          echo "Inspecting Pull Request title: '$PR_TITLE'"
+          if ! echo "$PR_TITLE" | grep -Eq '^(feat|fix|docs|style|refactor|perf|test|build|ci|chore|revert|Revert)(\([a-zA-Z0-9_\-\.\/]+\))?(!)?: .{1,100}'; then
+            echo "::error::PR title '$PR_TITLE' does not adhere to Conventional Commits format! Expected: 'type(scope): summary'"
             exit 1
           fi
 
       - name: "Validate Pull Request Commits and File Hygiene"
+        env:
+          BASE_REF: "origin/${{ github.base_ref }}"
         run: |
-          python3 tools/ci/pr_hygiene_check.py --base-ref "origin/${{ github.base_ref }}" --root .
+          python3 tools/ci/pr_hygiene_check.py --base-ref "$BASE_REF" --root .

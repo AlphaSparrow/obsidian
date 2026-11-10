@@ -9,7 +9,10 @@ on:
 
 concurrency:
   group: "${{ github.workflow }}-${{ github.ref }}"
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
 
 jobs:
   ddia-invariants-and-sanitizers:
@@ -24,12 +27,13 @@ jobs:
       - name: "Install Build Dependencies"
         run: |
           sudo apt-get update
-          sudo apt-get install -y cmake ninja-build ccache
+          sudo apt-get install -y --no-install-recommends cmake ninja-build ccache
 
       - name: "Set up Ccache"
         uses: "hendrikmuhs/ccache-action@v1.2"
         with:
           key: "${{ runner.os }}-sanitizers-ccache"
+          max-size: "2G"
 
       - name: "Configure CMake (Preset ci-linux-sanitizers)"
         run: "cmake --preset ci-linux-sanitizers"
@@ -38,7 +42,7 @@ jobs:
         run: "cmake --build --preset ci-linux-sanitizers"
 
       - name: "Run DDIA Invariant & Sanitizer Tests"
-        run: "ctest --preset ci-linux-sanitizers"
+        run: "ctest --preset ci-linux-sanitizers --output-on-failure"
 
       - name: "Execute DDIA Latency & SLA Microbenchmark"
         run: |
@@ -77,12 +81,13 @@ jobs:
       - name: "Install Build Dependencies"
         run: |
           sudo apt-get update
-          sudo apt-get install -y cmake ninja-build ccache
+          sudo apt-get install -y --no-install-recommends cmake ninja-build ccache
 
       - name: "Set up Ccache"
         uses: "hendrikmuhs/ccache-action@v1.2"
         with:
           key: "${{ runner.os }}-tsan-ccache"
+          max-size: "2G"
 
       - name: "Configure CMake (Preset ci-linux-tsan)"
         run: "cmake --preset ci-linux-tsan"
@@ -93,7 +98,7 @@ jobs:
       - name: "Execute Concurrency Tests under TSan"
         env:
           TSAN_OPTIONS: "halt_on_error=1 abort_on_error=1 second_deadlock_stack=1 history_size=7"
-        run: "ctest --preset ci-linux-tsan"
+        run: "ctest --preset ci-linux-tsan --output-on-failure"
 
       - name: "Publish TSan Concurrency Report to Job Summary"
         if: always()
@@ -119,18 +124,19 @@ jobs:
       - name: "Install Static Analysis Tools"
         run: |
           sudo apt-get update
-          sudo apt-get install -y cmake ninja-build clang-tidy clang-format cppcheck ccache
+          sudo apt-get install -y --no-install-recommends cmake ninja-build clang-tidy clang-format cppcheck ccache
 
       - name: "Set up Ccache"
         uses: "hendrikmuhs/ccache-action@v1.2"
         with:
           key: "${{ runner.os }}-static-analysis-ccache"
+          max-size: "2G"
 
       - name: "Verify Code Formatting (clang-format)"
         run: |
           echo "Checking C++20 code formatting across codebase..."
-          find kernel compute storage engines runtime terminal tests -type f \( -name "*.cpp" -o -name "*.hpp" -o -name "*.h" \) \
-            | xargs clang-format --dry-run --Werror
+          find kernel compute storage engines runtime terminal tests -type f \( -name "*.cpp" -o -name "*.hpp" -o -name "*.h" \) -print0 \
+            | xargs -0 clang-format --dry-run --Werror
 
       - name: "Run Standalone Cppcheck Deep Scan"
         run: |
@@ -142,7 +148,7 @@ jobs:
                    --std=c++20 \
                    --error-exitcode=1 \
                    --quiet \
-                   kernel storage compute tests
+                   kernel storage compute runtime tests
 
       - name: "Configure CMake with Clang-Tidy (ci-static-analysis)"
         run: "cmake --preset ci-static-analysis"
@@ -175,12 +181,13 @@ jobs:
       - name: "Install Coverage & Build Dependencies"
         run: |
           sudo apt-get update
-          sudo apt-get install -y cmake ninja-build lcov python3 ccache
+          sudo apt-get install -y --no-install-recommends cmake ninja-build lcov python3 ccache
 
       - name: "Set up Ccache"
         uses: "hendrikmuhs/ccache-action@v1.2"
         with:
           key: "${{ runner.os }}-coverage-ccache"
+          max-size: "2G"
 
       - name: "Configure CMake with Coverage (Preset ci-coverage)"
         run: "cmake --preset ci-coverage"
@@ -189,13 +196,13 @@ jobs:
         run: "cmake --build --preset ci-coverage"
 
       - name: "Execute Test Suite to Generate Coverage Counters"
-        run: "ctest --preset ci-coverage"
+        run: "ctest --preset ci-coverage --output-on-failure"
 
       - name: "Capture & Filter LCOV Data"
         run: |
-          lcov --capture --directory build/ci-coverage --output-file coverage.raw.info
-          lcov --remove coverage.raw.info '/usr/*' '*/third_party/*' --output-file coverage.info
-          genhtml coverage.info --output-directory coverage_html --title "Obsidian Engine Code Coverage"
+          lcov --capture --directory build/ci-coverage --output-file coverage.raw.info --ignore-errors inconsistent,mismatch || lcov --capture --directory build/ci-coverage --output-file coverage.raw.info
+          lcov --remove coverage.raw.info '/usr/*' '*/third_party/*' --output-file coverage.info --ignore-errors unused,inconsistent || cp coverage.raw.info coverage.info
+          genhtml coverage.info --output-directory coverage_html --title "Obsidian Engine Code Coverage" --ignore-errors inconsistent,corrupt || true
 
       - name: "Run Coverage Analytics Quality Gate"
         run: |
@@ -234,6 +241,8 @@ jobs:
           format: "table"
           exit-code: "0"
           severity: "CRITICAL,HIGH"
+        env:
+          GITHUB_TOKEN: "${{ secrets.GITHUB_TOKEN }}"
 
       - name: "Upload SBOM Distribution Artifacts"
         uses: "actions/upload-artifact@v4"
@@ -339,11 +348,11 @@ jobs:
         if: "runner.os == 'Linux'"
         run: |
           sudo apt-get update
-          sudo apt-get install -y cmake ninja-build ccache
+          sudo apt-get install -y --no-install-recommends cmake ninja-build ccache
 
       - name: "Install macOS Dependencies"
         if: "runner.os == 'macOS'"
-        run: "brew install ninja"
+        run: "brew install ninja ccache"
 
       - name: "Setup Windows Ninja"
         if: "runner.os == 'Windows'"
@@ -354,10 +363,11 @@ jobs:
         uses: "ilammy/msvc-dev-cmd@v1"
 
       - name: "Set up Ccache"
-        if: "runner.os == 'Linux'"
+        if: "runner.os != 'Windows'"
         uses: "hendrikmuhs/ccache-action@v1.2"
         with:
           key: "${{ runner.os }}-${{ matrix.preset }}-ccache"
+          max-size: "2G"
 
       - name: "Configure CMake (Preset ${{ matrix.preset }})"
         run: "cmake --preset ${{ matrix.preset }}"
@@ -366,7 +376,7 @@ jobs:
         run: "cmake --build --preset ${{ matrix.preset }}"
 
       - name: "Run CTest Suite (Lakehouse + DDIA)"
-        run: "ctest --preset ${{ matrix.preset }}"
+        run: "ctest --preset ${{ matrix.preset }} --output-on-failure"
 
       - name: "Package Distribution (CPack)"
         run: "cpack --preset ${{ matrix.preset }}"
@@ -391,7 +401,7 @@ jobs:
         with:
           path: "artifacts_dist"
 
-      - name: "Generate SHA-256 Supply Chain Manifest"
+      - name: "Generate SHA-256 & SHA-512 Supply Chain Manifests"
         run: |
           echo "### 📦 Multi-Platform Distribution & Supply Chain Verification" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
@@ -400,20 +410,25 @@ jobs:
 
           mkdir -p release_manifest
           > release_manifest/SHA256SUMS
+          > release_manifest/SHA512SUMS
 
           find artifacts_dist -type f \( -name "*.tar.gz" -o -name "*.deb" -o -name "*.zip" \) | sort | while read -r file; do
             fname=$(basename "$file")
             fsize=$(ls -lh "$file" | awk '{print $5}')
-            fsha=$(sha256sum "$file" | awk '{print $1}')
-            echo "$fsha  $fname" >> release_manifest/SHA256SUMS
-            echo "| \`$fname\` | \`$fsize\` | \`$fsha\` |" >> $GITHUB_STEP_SUMMARY
+            fsha256=$(sha256sum "$file" | awk '{print $1}')
+            fsha512=$(sha512sum "$file" | awk '{print $1}')
+            echo "$fsha256  $fname" >> release_manifest/SHA256SUMS
+            echo "$fsha512  $fname" >> release_manifest/SHA512SUMS
+            echo "| \`$fname\` | \`$fsize\` | \`$fsha256\` |" >> $GITHUB_STEP_SUMMARY
           done
 
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "> **Verification:** All distribution archives verified against DDIA storage invariants and cryptographic checksums." >> $GITHUB_STEP_SUMMARY
 
-      - name: "Upload SHA-256 Manifest"
+      - name: "Upload Checksum Manifests"
         uses: "actions/upload-artifact@v4"
         with:
-          name: "obsidian-release-manifest-sha256"
-          path: "release_manifest/SHA256SUMS"
+          name: "obsidian-release-checksums"
+          path: |
+            release_manifest/SHA256SUMS
+            release_manifest/SHA512SUMS

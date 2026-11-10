@@ -1,0 +1,55 @@
+name: "Obsidian CodeQL Security Analysis"
+
+on:
+  push:
+    branches: [ "main", "master" ]
+  pull_request:
+    branches: [ "main", "master" ]
+  schedule:
+    - cron: '0 6 * * 1'
+
+concurrency:
+  group: "codeql-${{ github.workflow }}-${{ github.ref }}"
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+  security-events: write
+
+jobs:
+  analyze:
+    name: "CodeQL Analysis (${{ matrix.language }})"
+    runs-on: "ubuntu-latest"
+    strategy:
+      fail-fast: false
+      matrix:
+        language: [ 'c-cpp', 'python' ]
+
+    steps:
+      - name: "Checkout Repository"
+        uses: "actions/checkout@v4"
+        with:
+          submodules: "recursive"
+
+      - name: "Initialize CodeQL"
+        uses: "github/codeql-action/init@v3"
+        with:
+          languages: ${{ matrix.language }}
+          queries: security-extended,security-and-quality
+
+      - name: "Install C++ Dependencies"
+        if: matrix.language == 'c-cpp'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends cmake ninja-build
+
+      - name: "Build C++ Source"
+        if: matrix.language == 'c-cpp'
+        run: |
+          cmake -B build/codeql -G Ninja -DCMAKE_BUILD_TYPE=Debug -DOBSIDIAN_ENABLE_TESTS=ON
+          cmake --build build/codeql --parallel $(nproc)
+
+      - name: "Perform CodeQL Analysis"
+        uses: "github/codeql-action/analyze@v3"
+        with:
+          category: "/language:${{ matrix.language }}"

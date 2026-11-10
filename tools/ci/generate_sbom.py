@@ -33,7 +33,7 @@ def compute_sha256(filepath: str) -> str:
 
 def scan_project_files(root_dir: str) -> List[Dict[str, Any]]:
     files_list = []
-    monitored_subdirs = ["kernel", "storage", "compute", "terminal", "cmake", "tests"]
+    monitored_subdirs = ["kernel", "storage", "compute", "runtime", "terminal", "cmake", "tests"]
     
     for sub in monitored_subdirs:
         sub_path = os.path.join(root_dir, sub)
@@ -91,6 +91,16 @@ def generate_spdx_sbom(root_dir: str, version: str = "0.1.0") -> Dict[str, Any]:
             "licenseConcluded": "Apache-2.0",
             "supplier": "Organization: Obsidian Quantitative Systems",
             "description": "Arrow columnar batch storage, partition data-skipping, and MVCC Lakehouse catalog"
+        },
+        {
+            "SPDXID": "SPDXRef-Package-Runtime-Orchestration",
+            "name": "obsidian-runtime",
+            "versionInfo": version,
+            "downloadLocation": "NOASSERTION",
+            "filesAnalyzed": False,
+            "licenseConcluded": "Apache-2.0",
+            "supplier": "Organization: Obsidian Quantitative Systems",
+            "description": "Event bus, task scheduler, dependency graph, streaming pipeline, and plugin engine"
         }
     ]
 
@@ -121,6 +131,11 @@ def generate_spdx_sbom(root_dir: str, version: str = "0.1.0") -> Dict[str, Any]:
                 "spdxElementId": "SPDXRef-Package-Obsidian-Core",
                 "relationshipType": "DEPENDS_ON",
                 "relatedSpdxElement": "SPDXRef-Package-Storage-Lakehouse"
+            },
+            {
+                "spdxElementId": "SPDXRef-Package-Obsidian-Core",
+                "relationshipType": "DEPENDS_ON",
+                "relatedSpdxElement": "SPDXRef-Package-Runtime-Orchestration"
             }
         ]
     }
@@ -165,6 +180,13 @@ def generate_cyclonedx_sbom(root_dir: str, version: str = "0.1.0") -> Dict[str, 
                 "version": version,
                 "scope": "required",
                 "purl": f"pkg:generic/obsidian-compute@{version}"
+            },
+            {
+                "type": "library",
+                "name": "obsidian-runtime",
+                "version": version,
+                "scope": "required",
+                "purl": f"pkg:generic/obsidian-runtime@{version}"
             }
         ]
     }

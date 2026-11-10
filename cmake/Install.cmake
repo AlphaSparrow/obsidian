@@ -22,6 +22,8 @@ install(TARGETS
         obsidian_warnings
         obsidian_sanitizers
         obsidian_malloc
+        obsidian_storage
+        obsidian_runtime
     EXPORT ObsidianTargets
     ARCHIVE  DESTINATION ${CMAKE_INSTALL_LIBDIR}     COMPONENT development
     LIBRARY  DESTINATION ${CMAKE_INSTALL_LIBDIR}     COMPONENT development
@@ -29,9 +31,41 @@ install(TARGETS
     INCLUDES DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
 )
 
+# Test and verification executables installation
+if(TARGET obsidian_ddia_tests)
+    install(TARGETS obsidian_ddia_tests
+        RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
+        COMPONENT runtime
+    )
+endif()
+if(TARGET obsidian_lakehouse_tests)
+    install(TARGETS obsidian_lakehouse_tests
+        RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
+        COMPONENT runtime
+    )
+endif()
+if(TARGET obsidian_runtime_tests)
+    install(TARGETS obsidian_runtime_tests
+        RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
+        COMPONENT runtime
+    )
+endif()
+
 # Public headers installation
 install(DIRECTORY kernel/
     DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/obsidian/kernel
+    COMPONENT development
+    FILES_MATCHING PATTERN "*.hpp" PATTERN "*.h"
+)
+
+install(DIRECTORY storage/
+    DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/obsidian/storage
+    COMPONENT development
+    FILES_MATCHING PATTERN "*.hpp" PATTERN "*.h"
+)
+
+install(DIRECTORY runtime/
+    DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/obsidian/runtime
     COMPONENT development
     FILES_MATCHING PATTERN "*.hpp" PATTERN "*.h"
 )
@@ -94,7 +128,11 @@ set(CPACK_COMPONENTS_ALL runtime development)
 
 set(CPACK_COMPONENT_RUNTIME_DISPLAY_NAME "Obsidian Application & Runtime")
 set(CPACK_COMPONENT_RUNTIME_DESCRIPTION  "Desktop terminal binary and core runtime engine.")
-set(CPACK_COMPONENT_RUNTIME_REQUIRED     ON)
+if(TARGET obsidian OR TARGET obsidian_ddia_tests)
+    set(CPACK_COMPONENT_RUNTIME_REQUIRED ON)
+else()
+    set(CPACK_COMPONENT_RUNTIME_REQUIRED OFF)
+endif()
 
 set(CPACK_COMPONENT_DEVELOPMENT_DISPLAY_NAME "Obsidian C++ SDK")
 set(CPACK_COMPONENT_DEVELOPMENT_DESCRIPTION  "Static libraries, exported headers, and CMake config modules.")

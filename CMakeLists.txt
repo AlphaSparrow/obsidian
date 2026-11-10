@@ -56,6 +56,7 @@ find_package(Threads REQUIRED)
 add_subdirectory(kernel)
 add_subdirectory(compute)
 add_subdirectory(storage)
+add_subdirectory(runtime)
 add_subdirectory(terminal)
 
 if(OBSIDIAN_ENABLE_TESTS)

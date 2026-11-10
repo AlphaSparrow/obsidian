@@ -1,5 +1,7 @@
 .git
 .github
+docs/
+dataset/
 build/
 install/
 *.exe
@@ -9,7 +11,9 @@ install/
 coverage_html/
 .cache/
 .idea/
+.vscode/
 *.swp
 *.tmp
 *.o
 *.a
+*.log

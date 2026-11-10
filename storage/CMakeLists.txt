@@ -4,12 +4,39 @@ add_library(obsidian_storage STATIC
     common/file_system.hpp
     common/file_system.cpp
     common/status.hpp
+    common/crc32c.hpp
+    common/crc32c.cpp
     schema/market_data_schema.hpp
+    schema/schema_validator.hpp
+    schema/schema_validator.cpp
+    codecs/gorilla.hpp
+    codecs/gorilla.cpp
+    codecs/delta_delta.hpp
+    codecs/delta_delta.cpp
+    mmap/mmap_file.hpp
+    mmap/mmap_file.cpp
+    cache/block_cache.hpp
+    cache/block_cache.cpp
+    snapshots/snapshot_manager.hpp
+    snapshots/snapshot_manager.cpp
+    dataset/dataset_importer.hpp
+    dataset/dataset_importer.cpp
     arrow/columnar_batch.hpp
+    parquet/parquet_structures.hpp
+    parquet/columnar_file_writer.hpp
+    parquet/columnar_file_writer.cpp
+    parquet/columnar_file_reader.hpp
+    parquet/columnar_file_reader.cpp
+    duckdb/duckdb_bridge.hpp
+    duckdb/duckdb_bridge.cpp
+    clickhouse/clickhouse_exporter.hpp
+    clickhouse/clickhouse_exporter.cpp
     lakehouse/lakehouse_structures.hpp
     lakehouse/partition_spec.hpp
     lakehouse/manifest_manager.hpp
     lakehouse/manifest_manager.cpp
+    lakehouse/integrity_guard.hpp
+    lakehouse/integrity_guard.cpp
     lakehouse/transaction.hpp
     lakehouse/transaction.cpp
     lakehouse/lakehouse_table.hpp

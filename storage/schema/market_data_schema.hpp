@@ -39,6 +39,21 @@ inline const char* DataTypeToString(DataType type) {
     }
 }
 
+inline size_t DataTypeSize(DataType type) {
+    switch (type) {
+        case DataType::Boolean: return 1;
+        case DataType::Int8: return 1;
+        case DataType::Int16: return 2;
+        case DataType::Int32: return 4;
+        case DataType::Int64: return 8;
+        case DataType::Float: return 4;
+        case DataType::Double: return 8;
+        case DataType::TimestampNs: return 8;
+        case DataType::String: return sizeof(void*);
+        default: return 0;
+    }
+}
+
 struct Field {
     std::string name;
     DataType type;
