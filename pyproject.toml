@@ -1,0 +1,26 @@
+[project]
+name = "obsidian"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+authors = [
+    { name = "Krish", email = "krishkundariya27@gmail.com" }
+]
+requires-python = ">=3.13"
+dependencies = [
+    "joblib>=1.6.0",
+    "matplotlib>=3.11.2",
+    "pandas>=3.1.0",
+    "requests>=2.34.2",
+    "scikit-learn>=1.9.1",
+    "shap>=0.54.1",
+    "tqdm>=4.70.1",
+    "xgboost>=3.4.1",
+]
+
+[project.scripts]
+obsidian = "obsidian:main"
+
+[build-system]
+requires = ["uv_build>=0.12.1,<0.13.0"]
+build-backend = "uv_build"

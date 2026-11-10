@@ -1,0 +1,5 @@
+Model,CV_AUC,Test_AUC,Test_F1,Test_Precision,Test_Recall,Test_Accuracy,Train_Time_Sec
+Random_Forest,0.876,0.9215,0.7074,0.6258,0.8135,0.8317,49.5
+AdaBoost,0.8805,0.9189,0.6628,0.845,0.5452,0.8613,18.4
+XGBoost,0.876,0.9182,0.7045,0.6074,0.8385,0.8241,8.0
+Logistic_Regression,0.8933,0.9144,0.7262,0.6304,0.8563,0.8386,2.8
