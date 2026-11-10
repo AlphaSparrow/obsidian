@@ -118,7 +118,7 @@ def generate_report_plots():
     print(f"✓ Saved '{pr_out}'")
 
     print("Generating Time-Series Overlay for Bitcoin...")
-    btc_test = df_test[df_test['Coin_ID'] == 'bitcoin'].copy()
+    btc_test = df_test[df_test['Coin_ID'].str.lower().isin(['bitcoin', 'btc'])].copy()
     
     if len(btc_test) > 0 and 'close' in btc_test.columns:
         btc_test['predicted_lottery'] = rf_model.predict(btc_test[features])
