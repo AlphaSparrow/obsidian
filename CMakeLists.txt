@@ -58,6 +58,7 @@ add_subdirectory(compute)
 add_subdirectory(storage)
 add_subdirectory(runtime)
 add_subdirectory(engines)
+add_subdirectory(crypto)
 add_subdirectory(terminal)
 
 if(OBSIDIAN_ENABLE_TESTS)
