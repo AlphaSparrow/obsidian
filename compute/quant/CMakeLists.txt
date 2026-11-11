@@ -2,6 +2,8 @@
 add_library(obsidian_quant STATIC
     volatility_model.cpp
     volatility_model.hpp
+    risk_engine.cpp
+    risk_engine.hpp
 )
 
 target_include_directories(obsidian_quant
