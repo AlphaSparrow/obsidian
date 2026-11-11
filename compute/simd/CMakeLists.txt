@@ -46,7 +46,12 @@ elseif(OBSIDIAN_ARCH_FAMILY STREQUAL "arm")
 endif()
 
 # Aggregate SIMD library
-add_library(obsidian_simd STATIC simd_dispatch.cpp)
+add_library(obsidian_simd STATIC
+    simd_dispatch.cpp
+    simd_dispatch.hpp
+    prospect_theory.cpp
+    prospect_theory.hpp
+)
 
 if(OBSIDIAN_ARCH_FAMILY STREQUAL "x86")
     target_sources(obsidian_simd PRIVATE
@@ -69,6 +74,7 @@ target_include_directories(obsidian_simd
 
 target_link_libraries(obsidian_simd
     PUBLIC
+        obsidian_storage
         obsidian::tuning
     PRIVATE
         obsidian::warnings
