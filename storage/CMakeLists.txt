@@ -21,6 +21,8 @@ add_library(obsidian_storage STATIC
     snapshots/snapshot_manager.cpp
     dataset/dataset_importer.hpp
     dataset/dataset_importer.cpp
+    dataset/universe_ingestor.hpp
+    dataset/universe_ingestor.cpp
     arrow/columnar_batch.hpp
     parquet/parquet_structures.hpp
     parquet/columnar_file_writer.hpp
