@@ -15,6 +15,8 @@ add_library(obsidian_runtime STATIC
     pipeline/pipeline_stage.hpp
     pipeline/execution_pipeline.hpp
     pipeline/execution_pipeline.cpp
+    pipeline/ml_inference_stage.hpp
+    pipeline/ml_inference_stage.cpp
     plugins/plugin_interface.hpp
     plugins/plugin_manifest.hpp
     plugins/plugin_manager.hpp
