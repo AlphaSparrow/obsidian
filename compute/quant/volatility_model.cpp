@@ -151,3 +151,4 @@ void VolatilityModel::Reset() {
 } // namespace quant
 } // namespace compute
 } // namespace obsidian
+

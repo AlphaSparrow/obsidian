@@ -20,3 +20,4 @@ target_link_libraries(obsidian_crypto
 )
 
 message(STATUS "[obsidian/crypto] Crypto feed telemetry library configured")
+

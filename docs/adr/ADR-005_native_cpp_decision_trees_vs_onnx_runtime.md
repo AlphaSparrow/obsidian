@@ -33,3 +33,4 @@ Key architectural rules:
 ## Consequences
 - **Positive**: 20x to 50x lower inference latency; no external shared library runtime dependencies; predictable memory profile.
 - **Negative**: Retraining models requires emitting an updated header/source file or binary parameter file and recompiling/reloading the inference stage.
+

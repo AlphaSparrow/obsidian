@@ -208,3 +208,4 @@ void PairTradingStrategy::Reset() {
 } // namespace strategy
 } // namespace engines
 } // namespace obsidian
+

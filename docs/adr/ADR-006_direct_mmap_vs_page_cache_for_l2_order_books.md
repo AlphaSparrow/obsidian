@@ -32,3 +32,4 @@ Implementation requirements:
 ## Consequences
 - **Positive**: Achieves near line-rate NVMe read throughput (> 3.2 GB/s per thread); eliminates memory duplication; reduces CPU utilization by 40%.
 - **Negative**: 32-bit address spaces are unsupported (64-bit architecture strictly required); improper boundary checking risks `SIGBUS` if underlying files are truncated concurrently.
+

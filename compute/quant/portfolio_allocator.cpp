@@ -351,3 +351,4 @@ AllocationResult PortfolioAllocator::RiskParity(
 } // namespace quant
 } // namespace compute
 } // namespace obsidian
+

@@ -34,3 +34,4 @@ Specific implementation mandates:
 ## Consequences
 - **Positive**: Eliminates GC and allocator overhead; deterministic P99.99 latency; guarantees tick chronological ordering per symbol stream.
 - **Negative**: Fixed capacity requires proactive backpressure handling (head-dropping or circular overwrites with telemetry alarms).
+
