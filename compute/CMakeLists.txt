@@ -10,6 +10,9 @@ endif()
 # SIMD dispatch library
 add_subdirectory(simd)
 
+# Quantitative models & analytics
+add_subdirectory(quant)
+
 # MPI distributed compute
 if(OBSIDIAN_ENABLE_MPI)
     message(STATUS "[obsidian/compute] MPI backend enabled (sources pending)")
