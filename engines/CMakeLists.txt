@@ -2,6 +2,8 @@
 add_library(obsidian_strategy STATIC
     strategy/cpt_breakout_strategy.cpp
     strategy/cpt_breakout_strategy.hpp
+    strategy/pair_trading_strategy.cpp
+    strategy/pair_trading_strategy.hpp
     strategy/strategy_base.hpp
 )
 
