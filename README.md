@@ -14,8 +14,10 @@ High-performance quantitative finance platform & DDIA-compliant lakehouse storag
 ## 🏛️ Architecture Overview
 
 - **Kernel Subsystem (`kernel/`)**: Lock-free LMAX-style Disruptor ring buffers, cacheline-aligned memory pools, NUMA-aware arenas, and a work-stealing threadpool dispatcher.
-- **Compute Subsystem (`compute/`)**: Runtime SIMD dispatch (AVX-512, AVX2, NEON), numerical pricing kernels, and vectorized market data analysis.
-- **Storage Subsystem (`storage/`)**: Lakehouse transactional engine featuring Arrow columnar batching, optimistic concurrency control (OCC), manifest snapshot management, data skipping, and background compaction.
+- **Compute Subsystem (`compute/`)**: Runtime SIMD dispatch (AVX-512, AVX2, NEON), numerical pricing kernels, and vectorized Cumulative Prospect Theory (CPT) behavioral feature extraction.
+- **Storage Subsystem (`storage/`)**: Lakehouse transactional engine featuring Arrow columnar batching, optimistic concurrency control (OCC), manifest snapshot management, data skipping, Gorilla/Delta-Delta codecs, mmap journaling with torn-write recovery, and DuckDB/ClickHouse zero-copy bridges.
+- **Runtime Subsystem (`runtime/`)**: EventBus with lock-free topic dispatch, 8-state component lifecycle registry, task dependency graph (DAG) with parallel wave scheduling, nanosecond-precision deterministic scheduler, streaming pipelines with backpressure, and native ML decision forest inference.
+- **Behavioral Quant ML Layer (`src/`)**: Tversky & Kahneman (1992) Cumulative Prospect Theory modeling, expanding-window walk-forward cross-validation (Random Forest AUC 0.9215), SHAP attribution diagnostics, and 16-asset cryptocurrency universe analytics.
 - **Terminal UI (`terminal/`)**: Low-latency desktop analytics terminal for real-time market visualization and order execution.
 
 ---

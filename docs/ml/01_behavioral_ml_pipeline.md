@@ -109,3 +109,21 @@ Using Lundberg & Lee (2017) Shapley Additive exPlanations (`shap.TreeExplainer`)
   - `plots/plot_roc_curve.png`: Out-of-sample ROC curves.
   - `plots/plot_pr_curve.png`: Precision-Recall curves.
   - `plots/plot_time_series_overlay.png`: Bitcoin price overlay highlighting predicted speculative windows.
+
+---
+
+## 5. High-Performance C++20 Convergence Engine
+
+To transition the validated empirical findings into a production trading environment:
+
+1. **C++20 SIMD Prospect Theory Engine** (`compute/simd/prospect_theory.hpp`):
+   - Implements identical Tversky & Kahneman (1992) value and probability weighting functions.
+   - Computes rolling 60-day windows in native C++ with SIMD acceleration, reducing computation time from minutes to sub-50 milliseconds.
+2. **Multi-Asset Lakehouse Universe Ingestion** (`storage/dataset/universe_ingestor.hpp`):
+   - Parses the 16-asset historical crypto universe and writes 64-byte aligned columnar `.obsd` files partitioned by `symbol=<SYM>/year=<YYYY>/data-001.obsd`.
+   - Generates min/max price and timestamp statistics for fast partition pruning.
+3. **Native Streaming ML Inference Stage** (`runtime/pipeline/ml_inference_stage.hpp`):
+   - Evaluates a compiled Decision Tree and Random Forest ensemble directly inside the low-latency streaming pipeline (`IStage`).
+   - Zero Python runtime dependencies in production.
+   - Emits `SignalGenerated` events onto the `EventBus` when speculative regime probabilities breach threshold ($\ge 0.70$).
+
