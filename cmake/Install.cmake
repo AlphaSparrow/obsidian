@@ -18,6 +18,9 @@ endif()
 install(TARGETS
         obsidian_kernel
         obsidian_simd
+        obsidian_quant
+        obsidian_strategy
+        obsidian_crypto
         obsidian_tuning
         obsidian_warnings
         obsidian_sanitizers
@@ -56,6 +59,12 @@ if(TARGET obsidian_quant_tests)
         COMPONENT runtime
     )
 endif()
+if(TARGET obsidian_engine_tests)
+    install(TARGETS obsidian_engine_tests
+        RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
+        COMPONENT runtime
+    )
+endif()
 
 # Public headers installation
 install(DIRECTORY kernel/
@@ -78,6 +87,24 @@ install(DIRECTORY runtime/
 
 install(DIRECTORY compute/simd/
     DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/obsidian/compute/simd
+    COMPONENT development
+    FILES_MATCHING PATTERN "*.hpp" PATTERN "*.h"
+)
+
+install(DIRECTORY compute/quant/
+    DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/obsidian/compute/quant
+    COMPONENT development
+    FILES_MATCHING PATTERN "*.hpp" PATTERN "*.h"
+)
+
+install(DIRECTORY engines/strategy/
+    DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/obsidian/engines/strategy
+    COMPONENT development
+    FILES_MATCHING PATTERN "*.hpp" PATTERN "*.h"
+)
+
+install(DIRECTORY crypto/
+    DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/obsidian/crypto
     COMPONENT development
     FILES_MATCHING PATTERN "*.hpp" PATTERN "*.h"
 )

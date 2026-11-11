@@ -83,3 +83,28 @@ target_link_libraries(obsidian_quant_tests
 )
 
 add_test(NAME QuantConvergenceTests COMMAND obsidian_quant_tests)
+
+add_executable(obsidian_engine_tests
+    test_engines.cpp
+)
+
+target_include_directories(obsidian_engine_tests
+    PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/..
+)
+
+target_link_libraries(obsidian_engine_tests
+    PRIVATE
+        obsidian_strategy
+        obsidian_quant
+        obsidian_crypto
+        obsidian_simd
+        obsidian_storage
+        obsidian_runtime
+        obsidian_kernel
+        obsidian::tuning
+        obsidian::warnings
+        obsidian::sanitizers
+)
+
+add_test(NAME EngineAndQuantTests COMMAND obsidian_engine_tests)
