@@ -534,7 +534,7 @@ wheels = [
 [[package]]
 name = "obsidian"
 version = "0.1.0"
-source = { editable = "." }
+source = { virtual = "." }
 dependencies = [
     { name = "joblib" },
     { name = "matplotlib" },
