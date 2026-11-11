@@ -50,6 +50,12 @@ if(TARGET obsidian_runtime_tests)
         COMPONENT runtime
     )
 endif()
+if(TARGET obsidian_quant_tests)
+    install(TARGETS obsidian_quant_tests
+        RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
+        COMPONENT runtime
+    )
+endif()
 
 # Public headers installation
 install(DIRECTORY kernel/
