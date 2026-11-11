@@ -14,3 +14,15 @@ ddia_report.md
 *.user
 .DS_Store
 Thumbs.db
+
+# Python & ML Environments
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+env/
+venv/
+.pytest_cache/
+*.egg-info/
+.coverage
+htmlcov/
