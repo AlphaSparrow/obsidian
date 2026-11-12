@@ -15,6 +15,7 @@ dependencies = [
     "scikit-learn>=1.9.1",
     "shap>=0.54.1",
     "tqdm>=4.70.1",
+    "websockets>=17.4",
     "xgboost>=3.4.1",
 ]
 
