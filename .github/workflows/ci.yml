@@ -63,7 +63,7 @@ jobs:
           python3 tools/ci/sla_budget_guard.py --report ddia_benchmark.md --budget-file docs/architecture/08_performance_budget.md --mock-if-empty
 
       - name: "Upload DDIA Report Artifact"
-        uses: "actions/upload-artifact@v4"
+        uses: "actions/upload-artifact@v7"
         with:
           name: "obsidian-ddia-benchmark-report"
           path: "ddia_benchmark.md"
@@ -209,7 +209,7 @@ jobs:
           python3 tools/ci/coverage_reporter.py --lcov coverage.info --threshold 75.0 --report coverage_summary.md --mock-if-empty
 
       - name: "Upload HTML Coverage Report"
-        uses: "actions/upload-artifact@v4"
+        uses: "actions/upload-artifact@v7"
         with:
           name: "obsidian-code-coverage-report"
           path: "coverage_html"
@@ -245,7 +245,7 @@ jobs:
           GITHUB_TOKEN: "${{ secrets.GITHUB_TOKEN }}"
 
       - name: "Upload SBOM Distribution Artifacts"
-        uses: "actions/upload-artifact@v4"
+        uses: "actions/upload-artifact@v7"
         with:
           name: "obsidian-sbom-manifests"
           path: "sbom_dist"
@@ -272,7 +272,7 @@ jobs:
           python3 tools/ci/validate_docs.py --docs docs --root .
 
       - name: "Upload Doxygen HTML Artifact"
-        uses: "actions/upload-artifact@v4"
+        uses: "actions/upload-artifact@v7"
         with:
           name: "obsidian-doxygen-api-docs"
           path: "build/docs/html"
@@ -382,7 +382,7 @@ jobs:
         run: "cpack --preset ${{ matrix.preset }}"
 
       - name: "Upload Platform Packages"
-        uses: "actions/upload-artifact@v4"
+        uses: "actions/upload-artifact@v7"
         with:
           name: "${{ matrix.artifact_name }}"
           path: "${{ matrix.artifact_path }}"
@@ -426,7 +426,7 @@ jobs:
           echo "> **Verification:** All distribution archives verified against DDIA storage invariants and cryptographic checksums." >> $GITHUB_STEP_SUMMARY
 
       - name: "Upload Checksum Manifests"
-        uses: "actions/upload-artifact@v4"
+        uses: "actions/upload-artifact@v7"
         with:
           name: "obsidian-release-checksums"
           path: |
